@@ -1,0 +1,36 @@
+{
+  "url": "http://127.0.0.1:8080/",
+  "viewports": {
+    "desktop": {
+      "width": 1280,
+      "height": 800,
+      "status": 200,
+      "title": "Апекс — платформа вовлечённости",
+      "hasCanvas": false,
+      "bodyTextLen": 1002,
+      "bodyTextHash": "5a8bac94f558240ba9de68845034e79c98846fcddd62179b12e67433553b2efa",
+      "bodyTextPrefix": "Главная Активности Коллеги Магазин 1 250 баллов АП Анна Петрова ",
+      "horizontalOverflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "screenshot": "/workspace/screenshots/apex-preview.png"
+    },
+    "mobile": {
+      "width": 390,
+      "height": 844,
+      "status": 200,
+      "title": "Апекс — платформа вовлечённости",
+      "hasCanvas": false,
+      "bodyTextLen": 1014,
+      "bodyTextHash": "ec4f2fdd05c66e4605d965b7fa5fbe90b3500eb16fad9a8af7efbee335c4331a",
+      "bodyTextPrefix": "АП Добрый вечер, Анна! Спасибо, что делаете нашу компанию лучше ",
+      "horizontalOverflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "screenshot": "/workspace/screenshots/apex-preview-mobile.png"
+    }
+  },
+  "brandWarnings": [],
+  "authWarnings": [],
+  "verdictFile": "/workspace/screenshots/apex-preview.json"
+}

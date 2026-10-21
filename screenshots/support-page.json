@@ -1,0 +1,36 @@
+{
+  "url": "http://127.0.0.1:8080/support",
+  "viewports": {
+    "desktop": {
+      "width": 1280,
+      "height": 800,
+      "status": 200,
+      "title": "Апекс — платформа вовлечённости",
+      "hasCanvas": false,
+      "bodyTextLen": 502,
+      "bodyTextHash": "dbb587da10199578eaa79e4d128c207177cc38f83bf25d7626168d73deb49a36",
+      "bodyTextPrefix": "Каталог Корзина Мои заказы История Профиль Поддержка Ваш баланс ",
+      "horizontalOverflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "screenshot": "/workspace/screenshots/support-page.png"
+    },
+    "mobile": {
+      "width": 390,
+      "height": 844,
+      "status": 200,
+      "title": "Апекс — платформа вовлечённости",
+      "hasCanvas": false,
+      "bodyTextLen": 470,
+      "bodyTextHash": "c016c0ecb7bec81582df22df3e96472076d82faf7d79d2732af2fb086ec29903",
+      "bodyTextPrefix": "АП Поддержка Напишите вопрос. Ответ придёт в это же обращение — ",
+      "horizontalOverflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "screenshot": "/workspace/screenshots/support-page-mobile.png"
+    }
+  },
+  "brandWarnings": [],
+  "authWarnings": [],
+  "verdictFile": "/workspace/screenshots/support-page.json"
+}

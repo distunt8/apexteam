@@ -1,0 +1,36 @@
+{
+  "url": "http://127.0.0.1:8080/",
+  "viewports": {
+    "desktop": {
+      "width": 1280,
+      "height": 800,
+      "status": 200,
+      "title": "Апекс — платформа вовлечённости",
+      "hasCanvas": false,
+      "bodyTextLen": 1013,
+      "bodyTextHash": "017095e6f761babbae5af6ec390309f24e489f6d800f1fae11e7377dbb63dfdc",
+      "bodyTextPrefix": "Главная Активности Коллеги Магазин Поддержка 1 250 баллов АП Анн",
+      "horizontalOverflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "screenshot": "/workspace/screenshots/support-nav.png"
+    },
+    "mobile": {
+      "width": 390,
+      "height": 844,
+      "status": 200,
+      "title": "Апекс — платформа вовлечённости",
+      "hasCanvas": false,
+      "bodyTextLen": 1061,
+      "bodyTextHash": "66956addd39951980a7b20cd03f85d8226ac0403ae61f6658a71032e90614fc7",
+      "bodyTextPrefix": "АП Добрый вечер, Анна! Спасибо, что делаете нашу компанию лучше ",
+      "horizontalOverflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "screenshot": "/workspace/screenshots/support-nav-mobile.png"
+    }
+  },
+  "brandWarnings": [],
+  "authWarnings": [],
+  "verdictFile": "/workspace/screenshots/support-nav.json"
+}

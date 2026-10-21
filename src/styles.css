@@ -1,0 +1,53 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --color-paper: #f4f8fc;
+  --color-card: #f3f7fc;
+  --color-surface: #ffffff;
+  --color-sidebar: #f7fafd;
+  --color-ink: #14171a;
+  --color-muted: #5c6770;
+  --color-line: #e3eaf2;
+  --color-brand: #306cc0;
+  --color-brand-strong: #2a63b6;
+  --color-brand-deep: #1e4a8a;
+  --color-brand-mid: #5a8dd6;
+  --color-brand-soft: #d6e6f8;
+  --color-brand-wash: #e8f2fb;
+  --color-danger: #b42334;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 14px;
+  --radius-xl: 18px;
+}
+
+@layer base {
+  html {
+    font-family: var(--font-sans);
+    background: var(--color-surface);
+    color: var(--color-ink);
+  }
+  body {
+    margin: 0;
+    min-height: 100%;
+    background: var(--color-surface);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+  }
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+  button:disabled {
+    cursor: not-allowed;
+  }
+  ::selection {
+    background: var(--color-brand-soft);
+    color: var(--color-brand-deep);
+  }
+}
+
+@utility tabular {
+  font-variant-numeric: tabular-nums;
+}
