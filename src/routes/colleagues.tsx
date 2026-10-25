@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { Shell } from "@/components/shell";
 import { Button, TextArea, TextInput } from "@/components/ui";
 import { formatNumber, initials } from "@/lib/format";
-import { awardAmounts, useStore } from "@/lib/store";
+import { awardAmounts, hasWorkBalance, useStore } from "@/lib/store";
 
 export const Route = createFileRoute("/colleagues")({ component: ColleaguesPage });
 
@@ -14,6 +14,7 @@ function ColleaguesPage() {
   const user = useStore((state) => state.people.find((person) => person.id === state.currentUserId));
   const send = useStore((state) => state.sendRecognition);
   const reward = useStore((state) => state.rewardBalance);
+  const feed = useStore((state) => state.feed);
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<string | null>(null);
   const [amount, setAmount] = useState<number | null>(null);
@@ -33,15 +34,22 @@ function ColleaguesPage() {
   if (!user) return null;
   const amounts = awardAmounts(user.role);
   const target = people.find((person) => person.id === selected);
-  const canReward = user.role !== "employee" || reward != null;
+  const canReward = hasWorkBalance(user.role);
+  const thanked = feed.some(
+    (item) => item.fromId === user.id && item.kind !== "manager" && Date.parse(item.createdAt) >= Date.now() - 7 * 24 * 60 * 60 * 1000,
+  );
 
   function submit() {
-    if (!selected || amount == null) {
-      toast.error("Выберите коллегу и сумму");
+    if (!selected) {
+      toast.error("Выберите коллегу");
+      return;
+    }
+    if (asManager && amount == null) {
+      toast.error("Выберите сумму поощрения");
       return;
     }
     setPending(true);
-    void send({ toId: selected, amount, message, asManager: canReward && asManager }).then((result) => {
+    void send({ toId: selected, amount: amount ?? 0, message, asManager: canReward && asManager }).then((result) => {
       setPending(false);
       if (!result.ok) toast.error(result.error);
       else {
@@ -55,13 +63,15 @@ function ColleaguesPage() {
   return (
     <Shell mode="top">
       <h1 className="text-3xl font-bold tracking-tight">Коллеги</h1>
-      <p className="mt-2 text-sm text-muted">Выберите коллегу и отправьте благодарность. Себе отправить нельзя.</p>
+      <p className="mt-2 text-sm text-muted">
+        Благодарность не списывает баллы. Отправить можно один раз в неделю.
+        {canReward ? " Поощрение руководителя списывается с рабочего баланса." : ""}
+      </p>
       <p className="mt-2 text-sm">
         Личный баланс: <span className="font-semibold text-brand">{formatNumber(user.balance)}</span>
-        <span className="text-muted">
-          {" "}
-          · рабочий: {reward == null ? "нет доступа" : formatNumber(reward)}
-        </span>
+        {canReward && asManager ? (
+          <span className="text-muted"> · рабочий: {reward == null ? "нет доступа" : formatNumber(reward)}</span>
+        ) : null}
       </p>
 
       <div className="mt-5 grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
@@ -120,23 +130,29 @@ function ColleaguesPage() {
           {canReward ? (
             <label className="mt-3 flex min-h-11 items-center gap-2 text-sm">
               <input type="checkbox" checked={asManager} onChange={(event) => setAsManager(event.target.checked)} />
-              Списать с рабочего баланса (поощрение)
+              Поощрение с рабочего баланса
             </label>
           ) : null}
-          <div className="mt-4 flex flex-wrap gap-2">
-            {amounts.map((value) => (
-              <button
-                key={value}
-                type="button"
-                onClick={() => setAmount(value)}
-                className={`min-h-11 min-w-14 rounded-md px-3 text-sm font-bold ${
-                  amount === value ? "bg-brand text-white" : "bg-surface text-ink"
-                }`}
-              >
-                {value}
-              </button>
-            ))}
-          </div>
+          {asManager ? (
+            <div className="mt-4 flex flex-wrap gap-2">
+              {amounts.map((value) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setAmount(value)}
+                  className={`min-h-11 min-w-14 rounded-md px-3 text-sm font-bold ${
+                    amount === value ? "bg-brand text-white" : "bg-surface text-ink"
+                  }`}
+                >
+                  {value}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <p className="mt-3 text-sm text-muted">
+              {thanked ? "На этой неделе благодарность уже отправлена." : "Баллы при этом не списываются."}
+            </p>
+          )}
           <label className="mt-4 block text-sm font-medium">
             Сообщение (необязательно)
             <TextArea
@@ -148,7 +164,7 @@ function ColleaguesPage() {
             />
           </label>
           <p className="text-right text-xs text-muted">{message.length}/120</p>
-          <Button type="submit" className="mt-3 w-full" disabled={!target || amount == null || pending}>
+          <Button type="submit" className="mt-3 w-full" disabled={!target || pending || (asManager ? amount == null : thanked)}>
             Отправить
           </Button>
         </form>

@@ -1,11 +1,12 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { LifeBuoy, Star } from "lucide-react";
-import { useState } from "react";
+import { Star } from "lucide-react";
+import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import { Shell } from "@/components/shell";
-import { Panel } from "@/components/ui";
+import { Button, Field, Panel, TextInput } from "@/components/ui";
 import { formatDateTime, formatNumber, formatPoints, initials } from "@/lib/format";
 import { ENTRY_LABEL, orderStatusLabel, ROLE_LABEL } from "@/lib/labels";
-import { useStore } from "@/lib/store";
+import { hasWorkBalance, useStore } from "@/lib/store";
 
 export const Route = createFileRoute("/profile")({ component: ProfilePage });
 
@@ -15,24 +16,17 @@ function ProfilePage() {
   const people = useStore((state) => state.people);
   const ledger = useStore((state) => state.ledger);
   const orders = useStore((state) => state.orders);
-  const progress = useStore((state) => state.progress);
-  const feed = useStore((state) => state.feed);
+  const achievements = useStore((state) => state.activitiesCatalog.achievements);
+  const achievementsStatus = useStore((state) => state.activitiesCatalog.status);
+  const loadActivities = useStore((state) => state.loadActivities);
   const [tab, setTab] = useState<"history" | "orders" | "badges">("history");
+  useEffect(() => {
+    void loadActivities();
+  }, [loadActivities]);
   if (!user) return null;
 
   const mine = ledger.filter((entry) => entry.userId === user.id);
   const myOrders = orders.filter((order) => order.userId === user.id);
-  const streak = progress.find((item) => item.userId === user.id && item.activityId === "act-streak")?.value ?? 0;
-  const steps = progress
-    .filter((item) => item.userId === user.id && item.activityId === "act-steps")
-    .reduce((max, item) => Math.max(max, item.value), 0);
-  const badges = [
-    { title: "10К шагов", on: steps >= 10000, hint: "Наберите 10 000 шагов за день" },
-    { title: "Активность", on: progress.some((item) => item.userId === user.id && item.rewarded), hint: "Получите любую награду" },
-    { title: "Целеустремлённость", on: streak >= 7, hint: `${streak} из 7 дней серии` },
-    { title: "Первая награда", on: myOrders.some((order) => order.status !== "cancelled"), hint: "Оформите заказ" },
-    { title: "Благодарность", on: feed.some((item) => item.fromId === user.id), hint: "Поблагодарите коллегу" },
-  ];
 
   return (
     <Shell mode="shop">
@@ -53,23 +47,16 @@ function ProfilePage() {
       <Panel className="mt-5">
         <p className="text-sm text-muted">Текущий баланс</p>
         <p className="mt-1 text-4xl font-bold text-brand">{formatPoints(user.balance)}</p>
-        <p className="mt-3 text-sm">
-          Рабочий баланс (поощрения):{" "}
-          <span className="font-semibold">{reward == null ? "нет доступа" : formatNumber(reward)}</span>
-        </p>
-        <p className="mt-1 text-sm text-muted">В рейтинге: {formatNumber(user.score)} накопленных баллов</p>
+        {hasWorkBalance(user.role) ? (
+          <p className="mt-3 text-sm">
+            Рабочий баланс (поощрения):{" "}
+            <span className="font-semibold">{reward == null ? "нет доступа" : formatNumber(reward)}</span>
+          </p>
+        ) : null}
+        <p className="mt-1 text-sm text-muted">В рейтинге: {formatNumber(user.score)} благодарностей</p>
       </Panel>
 
-      <Link
-        to="/support"
-        className="mt-4 flex min-h-12 items-center gap-3 rounded-xl bg-card px-4 py-3 lg:hidden"
-      >
-        <LifeBuoy className="size-5 shrink-0 text-brand" />
-        <span>
-          <span className="block text-sm font-semibold">Поддержка</span>
-          <span className="block text-xs text-muted">Написать, если не пришёл заказ или баллы</span>
-        </span>
-      </Link>
+      <PasswordCard />
 
       <div className="mt-5 flex gap-2">
         {(
@@ -136,15 +123,66 @@ function ProfilePage() {
 
       {tab === "badges" ? (
         <ul className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
-          {badges.map((badge) => (
-            <li key={badge.title} className="rounded-lg bg-card p-4">
-              <Star className={`size-6 ${badge.on ? "fill-brand text-brand" : "text-brand-soft"}`} />
-              <p className="mt-3 font-semibold">{badge.title}</p>
-              <p className="mt-1 text-xs text-muted">{badge.on ? "Открыто" : badge.hint}</p>
+          {achievementsStatus === "loading" && achievements.length === 0 ? (
+            <li className="text-sm text-muted">Загружаем достижения.</li>
+          ) : null}
+          {achievementsStatus !== "loading" && achievements.length === 0 ? (
+            <li className="text-sm text-muted">Достижений пока нет.</li>
+          ) : null}
+          {achievements.map((badge) => (
+            <li key={badge.id} className="rounded-lg bg-card p-4">
+              <Star className={`size-6 ${badge.earned ? "fill-brand text-brand" : "text-brand-soft"}`} />
+              <p className="mt-3 font-semibold">{badge.name}</p>
+              <p className="mt-1 text-xs text-muted">
+                {badge.earned ? "Открыто" : badge.description}
+              </p>
             </li>
           ))}
         </ul>
       ) : null}
     </Shell>
+  );
+}
+
+function PasswordCard() {
+  const changePassword = useStore((state) => state.changePassword);
+  const [password, setPassword] = useState("");
+  const [again, setAgain] = useState("");
+  const [pending, setPending] = useState(false);
+
+  return (
+    <Panel className="mt-4">
+      <h2 className="text-lg font-bold">Пароль</h2>
+      <form
+        className="mt-3 grid gap-3 sm:grid-cols-2"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (password !== again) {
+            toast.error("Пароли не совпадают");
+            return;
+          }
+          setPending(true);
+          void changePassword(password).then((result) => {
+            setPending(false);
+            if (!result.ok) toast.error(result.error);
+            else {
+              toast.success("Пароль изменён");
+              setPassword("");
+              setAgain("");
+            }
+          });
+        }}
+      >
+        <Field label="Новый пароль">
+          <TextInput type="password" autoComplete="new-password" value={password} onChange={(event) => setPassword(event.target.value)} />
+        </Field>
+        <Field label="Ещё раз">
+          <TextInput type="password" autoComplete="new-password" value={again} onChange={(event) => setAgain(event.target.value)} />
+        </Field>
+        <Button type="submit" disabled={pending} className="sm:col-span-2 sm:w-auto">
+          Сменить пароль
+        </Button>
+      </form>
+    </Panel>
   );
 }

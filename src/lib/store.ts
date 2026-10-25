@@ -6,17 +6,22 @@ import {
   ApexError,
   apex,
   extractToken,
+  loadActivitiesBundle,
   loadWorkspace,
+  mapTicket,
+  passwordChangeRequired,
   readToken,
   shapeOf,
   statusToApi,
+  ticketStatusToApi,
   writeToken,
+  type ActivitiesBundle,
 } from "@/lib/apex";
 
 export type Role = "employee" | "manager" | "admin" | "chief";
 export type Category = string;
 export type OrderStatus = "created" | "processing" | "ready" | "issued" | "cancelled";
-export type TicketStatus = "open" | "answered" | "closed";
+export type TicketStatus = "open" | "in_progress" | "resolved" | "closed";
 export type ActivityKind = "steps" | "streak" | "quiz" | "once";
 export type ActivityCategory = "survey" | "challenge" | "event";
 export type EntryType =
@@ -149,6 +154,7 @@ export interface FeedItem {
 export interface TicketMessage {
   id: string;
   authorId: string;
+  authorName?: string;
   text: string;
   createdAt: string;
 }
@@ -156,6 +162,7 @@ export interface TicketMessage {
 export interface Ticket {
   id: string;
   userId: string;
+  userName?: string;
   subject: string;
   status: TicketStatus;
   createdAt: string;
@@ -168,6 +175,11 @@ export interface Notice {
   text: string;
   read: boolean;
   createdAt: string;
+}
+
+export interface ActivitiesCatalog extends ActivitiesBundle {
+  status: "idle" | "loading" | "ready" | "error";
+  error: string;
 }
 
 export interface AppState {
@@ -185,9 +197,12 @@ export interface AppState {
   orders: Order[];
   ledger: LedgerEntry[];
   activities: Activity[];
+  activitiesCatalog: ActivitiesCatalog;
   progress: Progress[];
   feed: FeedItem[];
   tickets: Ticket[];
+  ticketsError: string;
+  mustChangePassword: boolean;
   notices: Notice[];
   seq: number;
 }
@@ -209,66 +224,21 @@ const seed = (): AppState => ({
   cart: [],
   orders: [],
   ledger: [],
-    activities: [
-    {
-      id: "act-steps",
-      title: "8 000 шагов",
-      description: "Дневная цель. В прототипе шаги приходят из демонстрационного источника, без Health Connect.",
-      category: "challenge",
-      kind: "steps",
-      reward: 80,
-      target: 8000,
-      active: true,
-      builtin: true,
-    },
-    {
-      id: "act-streak",
-      title: "7 дней активности",
-      description: "Заходите и отмечайте день. На седьмой день — разовая награда.",
-      category: "challenge",
-      kind: "streak",
-      reward: 300,
-      target: 7,
-      active: true,
-      builtin: true,
-    },
-    {
-      id: "act-team",
-      title: "Команда в движении",
-      description: "Общий челлендж подразделения. Отметьте участие — команда ближе к призу.",
-      category: "challenge",
-      kind: "once",
-      reward: 20,
-      target: 1,
-      active: true,
-      builtin: true,
-    },
-    {
-      id: "act-quiz",
-      title: "Сколько в тебе хайпа?",
-      description: "Короткий опрос о том, как устроена команда. Нужны 2 верных ответа из 3.",
-      category: "survey",
-      kind: "quiz",
-      reward: 10,
-      target: 1,
-      active: true,
-      builtin: true,
-    },
-    {
-      id: "act-meetup",
-      title: "Внутренний митап",
-      description: "Подтвердите участие во встрече пятницы. Начисление один раз.",
-      category: "event",
-      kind: "once",
-      reward: 40,
-      target: 1,
-      active: true,
-      builtin: true,
-    },
-  ],
+  activities: [],
+  activitiesCatalog: {
+    status: "idle",
+    error: "",
+    quests: [],
+    surveys: [],
+    events: [],
+    achievements: [],
+    warnings: [],
+  },
   progress: [],
   feed: [],
   tickets: [],
+  ticketsError: "",
+  mustChangePassword: false,
   notices: [],
 });
 
@@ -295,6 +265,10 @@ export function isAdminRole(role: Role) {
   return role === "admin" || role === "chief";
 }
 
+export function hasWorkBalance(role: Role) {
+  return role === "manager";
+}
+
 export function awardAmounts(role: Role) {
   if (role === "employee") return [10, 20, 30, 50];
   return [50, 100, 200, 500];
@@ -305,6 +279,25 @@ interface Actions {
   login: (email: string, password: string) => Promise<Result>;
   logout: () => void;
   refresh: () => Promise<void>;
+  changePassword: (password: string) => Promise<Result>;
+  loadTickets: () => Promise<void>;
+  createEmployee: (input: {
+    email: string;
+    password: string;
+    firstName: string;
+    lastName: string;
+    middleName?: string;
+    department: string;
+    position: string;
+  }) => Promise<Result>;
+  loadActivities: () => Promise<void>;
+  joinQuest: (questId: string) => Promise<Result>;
+  completeQuestStep: (questId: string, stepId: string, proof?: { storagePath?: string; comment?: string }) => Promise<Result>;
+  finishQuest: (questId: string) => Promise<Result>;
+  submitSurvey: (surveyId: string, answers: { questionId: string; value: unknown }[]) => Promise<Result>;
+  registerForEvent: (eventId: string) => Promise<Result>;
+  cancelEventRegistration: (eventId: string) => Promise<Result>;
+  claimEventReward: (eventId: string) => Promise<Result>;
   addToCart: (productId: string) => Promise<Result>;
   setQty: (productId: string, qty: number) => Promise<Result>;
   checkout: () => Promise<Result>;
@@ -313,9 +306,9 @@ interface Actions {
   completeOnce: (activityId: string) => Result;
   submitQuiz: (correct: number) => Result;
   sendRecognition: (input: { toId: string; amount: number; message: string; asManager?: boolean }) => Promise<Result>;
-  createTicket: (subject: string, text: string) => Result;
-  replyTicket: (ticketId: string, text: string) => Result;
-  setTicketStatus: (ticketId: string, status: TicketStatus) => Result;
+  createTicket: (subject: string, text: string) => Promise<Result>;
+  replyTicket: (ticketId: string, text: string) => Promise<Result>;
+  setTicketStatus: (ticketId: string, status: TicketStatus) => Promise<Result>;
   setOrderStatus: (orderId: string, status: string) => Promise<Result>;
   saveProduct: (product: Product) => Promise<Result>;
   adjustBalance: (input: {
@@ -345,6 +338,19 @@ function rewardOnce(state: AppState, user: Person, activity: Activity, _reason: 
   return { ok: true };
 }
 
+const MUST_CHANGE_KEY = "apex.must-change-user";
+
+function rememberPasswordChange(userId: string, required: boolean) {
+  if (typeof window === "undefined" || !userId) return;
+  if (required) window.localStorage.setItem(MUST_CHANGE_KEY, userId);
+  else if (window.localStorage.getItem(MUST_CHANGE_KEY) === userId) window.localStorage.removeItem(MUST_CHANGE_KEY);
+}
+
+function rememberedPasswordChange(userId: string) {
+  if (typeof window === "undefined" || !userId) return false;
+  return window.localStorage.getItem(MUST_CHANGE_KEY) === userId;
+}
+
 let booting: Promise<void> | null = null;
 
 async function commit(set: (partial: Partial<AppState>) => void, run: () => Promise<void>): Promise<Result> {
@@ -365,6 +371,31 @@ async function commit(set: (partial: Partial<AppState>) => void, run: () => Prom
   return { ok: true };
 }
 
+async function reloadActivities(
+  set: (partial: Partial<AppState>) => void,
+  get: () => { loadActivities: () => Promise<void> },
+  run: () => Promise<unknown>,
+): Promise<Result> {
+  const result = await commit(set, async () => {
+    await run();
+  });
+  if (result.ok) await get().loadActivities();
+  return result;
+}
+
+function thankedThisWeek(feed: FeedItem[], userId: string) {
+  const from = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  return feed.some((item) => item.fromId === userId && item.kind !== "manager" && Date.parse(item.createdAt) >= from);
+}
+
+function asTicketList(data: unknown): unknown[] {
+  if (Array.isArray(data)) return data;
+  if (data && typeof data === "object" && "items" in data && Array.isArray((data as { items: unknown[] }).items)) {
+    return (data as { items: unknown[] }).items;
+  }
+  return [];
+}
+
 export const useStore = create<AppState & Actions>()(
   persist(
     immer((set, get) => ({
@@ -380,7 +411,8 @@ export const useStore = create<AppState & Actions>()(
           set({ session: "loading", sessionError: "" });
           try {
             const workspace = await loadWorkspace();
-            set({ ...workspace, session: "ready", sessionError: "" });
+            const mustChangePassword = workspace.mustChangePassword || rememberedPasswordChange(workspace.currentUserId);
+            set({ ...workspace, mustChangePassword, session: "ready", sessionError: "" });
           } catch (error) {
             if (error instanceof ApexError && error.status === 401) {
               writeToken(null);
@@ -412,7 +444,14 @@ export const useStore = create<AppState & Actions>()(
           }
           writeToken(token);
           const workspace = await loadWorkspace();
-          set({ ...workspace, session: "ready", sessionError: "" });
+          const mustChangePassword = passwordChangeRequired(data) || workspace.mustChangePassword;
+          rememberPasswordChange(workspace.currentUserId, mustChangePassword);
+          set({
+            ...workspace,
+            mustChangePassword,
+            session: "ready",
+            sessionError: "",
+          });
           return { ok: true as const };
         } catch (error) {
           writeToken(null);
@@ -443,12 +482,135 @@ export const useStore = create<AppState & Actions>()(
           orders: [],
           ledger: [],
           feed: [],
+          tickets: [],
+          ticketsError: "",
+          mustChangePassword: false,
+          activitiesCatalog: {
+            status: "idle",
+            error: "",
+            quests: [],
+            surveys: [],
+            events: [],
+            achievements: [],
+            warnings: [],
+          },
         });
       },
       refresh: async () => {
         const workspace = await loadWorkspace();
-        set({ ...workspace, session: "ready", sessionError: "" });
+        const mustChangePassword =
+          get().mustChangePassword || workspace.mustChangePassword || rememberedPasswordChange(workspace.currentUserId);
+        set({ ...workspace, mustChangePassword, session: "ready", sessionError: "" });
       },
+      changePassword: async (password) => {
+        const next = password.trim();
+        if (next.length < 6) return { ok: false as const, error: "Пароль короче 6 символов" };
+        try {
+          await apex("/api/Auth/change-password", {
+            method: "POST",
+            body: JSON.stringify({ newPassword: next }),
+          });
+        } catch (error) {
+          return { ok: false as const, error: error instanceof Error ? error.message : "Не удалось сменить пароль" };
+        }
+        rememberPasswordChange(get().currentUserId, false);
+        set({ mustChangePassword: false });
+        return { ok: true as const };
+      },
+      loadTickets: async () => {
+        const role = get().people.find((item) => item.id === get().currentUserId)?.role;
+        const path = role === "admin" || role === "chief" ? "/api/support/tickets/all?page=1&pageSize=50" : "/api/support/tickets?page=1&pageSize=50";
+        try {
+          const data = await apex(path);
+          const tickets = (Array.isArray(data) ? data : asTicketList(data))
+            .map(mapTicket)
+            .filter((item): item is NonNullable<typeof item> => Boolean(item));
+          set({ tickets, ticketsError: "" });
+        } catch (error) {
+          set({
+            ticketsError: error instanceof Error ? error.message : "Не удалось загрузить обращения",
+          });
+        }
+      },
+      createEmployee: async (input) => {
+        const email = input.email.trim();
+        const firstName = input.firstName.trim();
+        const lastName = input.lastName.trim();
+        const department = input.department.trim();
+        const position = input.position.trim();
+        if (!email || !firstName || !lastName || !department || !position) {
+          return { ok: false as const, error: "Заполните почту, имя, фамилию, отдел и должность" };
+        }
+        if (input.password.trim().length < 6) return { ok: false as const, error: "Пароль короче 6 символов" };
+        return commit(set, async () => {
+          await apex("/api/users", {
+            method: "POST",
+            body: JSON.stringify({
+              email,
+              password: input.password,
+              firstName,
+              lastName,
+              middleName: input.middleName?.trim() || null,
+              department,
+              position,
+            }),
+          });
+        });
+      },
+      loadActivities: async () => {
+        const userId = get().currentUserId;
+        if (!userId) return;
+        const current = get().activitiesCatalog;
+        if (current.status === "idle") {
+          set({ activitiesCatalog: { ...current, status: "loading", error: "" } });
+        }
+        try {
+          const bundle = await loadActivitiesBundle(userId);
+          set({ activitiesCatalog: { status: "ready", error: "", ...bundle } });
+        } catch (error) {
+          if (error instanceof ApexError && error.status === 401) {
+            writeToken(null);
+            set({ session: "anon", sessionError: "Сессия закончилась. Войдите снова." });
+            return;
+          }
+          set({
+            activitiesCatalog: {
+              ...get().activitiesCatalog,
+              status: "error",
+              error: error instanceof Error ? error.message : "Не удалось загрузить активности",
+            },
+          });
+        }
+      },
+      joinQuest: (questId) =>
+        reloadActivities(set, get, () => apex(`/api/quests/${questId}/join`, { method: "POST" })),
+      completeQuestStep: (questId, stepId, proof) =>
+        reloadActivities(set, get, () =>
+          apex(`/api/quests/${questId}/steps/${stepId}/complete`, {
+            method: "POST",
+            body: JSON.stringify({
+              storagePath: proof?.storagePath?.trim() || null,
+              comment: proof?.comment?.trim() || null,
+            }),
+          }),
+        ),
+      finishQuest: (questId) =>
+        reloadActivities(set, get, () => apex(`/api/quests/${questId}/complete`, { method: "POST" })),
+      submitSurvey: (surveyId, answers) =>
+        reloadActivities(set, get, () =>
+          apex(`/api/surveys/${surveyId}/responses`, {
+            method: "POST",
+            body: JSON.stringify({
+              answers: answers.map((answer) => ({ questionId: Number(answer.questionId), value: answer.value })),
+            }),
+          }),
+        ),
+      registerForEvent: (eventId) =>
+        reloadActivities(set, get, () => apex(`/api/events/${eventId}/register`, { method: "POST" })),
+      cancelEventRegistration: (eventId) =>
+        reloadActivities(set, get, () => apex(`/api/events/${eventId}/registration`, { method: "DELETE" })),
+      claimEventReward: (eventId) =>
+        reloadActivities(set, get, () => apex(`/api/events/${eventId}/reward`, { method: "POST" })),
       addToCart: async (productId) => {
         const state = get();
         const product = state.products.find((item) => item.id === productId);
@@ -609,8 +771,13 @@ export const useStore = create<AppState & Actions>()(
         if (!sender || !recipient) return { ok: false as const, error: "Сотрудник не найден" };
         if (sender.id === recipient.id) return { ok: false as const, error: "Нельзя поблагодарить самого себя" };
         if (recipient.status !== "active") return { ok: false as const, error: "Этому сотруднику сейчас нельзя отправить" };
-        if (!Number.isInteger(amount) || amount <= 0) return { ok: false as const, error: "Укажите сумму" };
-        const body: Record<string, unknown> = { toUserId: toId, amount };
+        const points = asManager ? amount : 1;
+        if (asManager && (!Number.isInteger(points) || points <= 0)) return { ok: false as const, error: "Укажите сумму" };
+        if (!asManager && textMessage.length < 2) return { ok: false as const, error: "Напишите пару слов" };
+        if (!asManager && thankedThisWeek(state.feed, sender.id)) {
+          return { ok: false as const, error: "Благодарность можно отправить один раз в неделю" };
+        }
+        const body: Record<string, unknown> = { toUserId: toId, amount: points };
         if (textMessage) body.message = textMessage;
         if (!asManager) body.isPublic = true;
         return commit(set, async () => {
@@ -620,64 +787,65 @@ export const useStore = create<AppState & Actions>()(
           });
         });
       },
-      createTicket: (subject, text) => {
+      createTicket: async (subject, text) => {
         const title = subject.trim();
         const body = text.trim();
         if (title.length < 3) return { ok: false, error: "Укажите тему" };
         if (body.length < 5) return { ok: false, error: "Опишите вопрос" };
-        set((state) => {
-          const user = person(state, state.currentUserId);
-          if (!user) return;
-          const now = new Date().toISOString();
-          state.tickets.unshift({
-            id: nextId(state, "t"),
-            userId: user.id,
-            subject: title,
-            status: "open",
-            createdAt: now,
-            messages: [{ id: nextId(state, "tm"), authorId: user.id, text: body, createdAt: now }],
+        try {
+          const data = await apex("/api/support/tickets", {
+            method: "POST",
+            body: JSON.stringify({ subject: title, message: body }),
           });
-          return;
-        });
-        return { ok: true };
-      },
-      replyTicket: (ticketId, text) => {
-        const body = text.trim();
-        if (body.length < 2) return { ok: false, error: "Введите ответ" };
-        let result: Result = { ok: false, error: "Недостаточно прав" };
-        set((state) => {
-          const actor = person(state, state.currentUserId);
-          if (!actor || !isAdminRole(actor.role)) return;
-          const ticket = state.tickets.find((item) => item.id === ticketId);
-          if (!ticket) {
-            result = { ok: false, error: "Обращение не найдено" };
-            return;
+          const ticket = mapTicket(data);
+          if (ticket) {
+            set((state) => {
+              state.tickets = [ticket, ...state.tickets.filter((item) => item.id !== ticket.id)];
+              state.ticketsError = "";
+            });
           }
-          ticket.messages.push({
-            id: nextId(state, "tm"),
-            authorId: actor.id,
-            text: body,
-            createdAt: new Date().toISOString(),
-          });
-          ticket.status = "answered";
-          pushNotice(state, ticket.userId, `${actor.name} ответила на обращение «${ticket.subject}».`);
-          result = { ok: true };
-          return;
-        });
-        return result;
+          void get().loadTickets();
+          return { ok: true as const };
+        } catch (error) {
+          return { ok: false as const, error: error instanceof Error ? error.message : "Не удалось отправить" };
+        }
       },
-      setTicketStatus: (ticketId, status) => {
-        let result: Result = { ok: false, error: "Недостаточно прав" };
-        set((state) => {
-          const actor = person(state, state.currentUserId);
-          if (!actor || !isAdminRole(actor.role)) return;
-          const ticket = state.tickets.find((item) => item.id === ticketId);
-          if (!ticket) return;
-          ticket.status = status;
-          result = { ok: true };
-          return;
-        });
-        return result;
+      replyTicket: async (ticketId, text) => {
+        const body = text.trim();
+        if (body.length < 2) return { ok: false, error: "Введите сообщение" };
+        try {
+          await apex(`/api/support/tickets/${ticketId}/messages`, {
+            method: "POST",
+            body: JSON.stringify({ message: body }),
+          });
+          const data = await apex(`/api/support/tickets/${ticketId}`);
+          const ticket = mapTicket(data);
+          if (ticket) {
+            set((state) => {
+              const index = state.tickets.findIndex((item) => item.id === ticket.id);
+              if (index >= 0) state.tickets[index] = ticket;
+              else state.tickets.unshift(ticket);
+            });
+          }
+          return { ok: true as const };
+        } catch (error) {
+          return { ok: false as const, error: error instanceof Error ? error.message : "Не удалось отправить" };
+        }
+      },
+      setTicketStatus: async (ticketId, status) => {
+        try {
+          await apex(`/api/support/tickets/${ticketId}/status`, {
+            method: "PATCH",
+            body: JSON.stringify({ status: ticketStatusToApi(status) }),
+          });
+          set((state) => {
+            const ticket = state.tickets.find((item) => item.id === ticketId);
+            if (ticket) ticket.status = status;
+          });
+          return { ok: true as const };
+        } catch (error) {
+          return { ok: false as const, error: error instanceof Error ? error.message : "Не удалось сменить статус" };
+        }
       },
       setOrderStatus: async (orderId, status) =>
         commit(set, async () => {
@@ -786,12 +954,9 @@ export const useStore = create<AppState & Actions>()(
         }),
     })),
     {
-      name: "apex-device-v1",
+      name: "apex-device-v3",
       skipHydration: true,
       partialize: (state) => ({
-        activities: state.activities,
-        progress: state.progress,
-        tickets: state.tickets,
         notices: state.notices,
         seq: state.seq,
       }),

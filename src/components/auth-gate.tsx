@@ -6,6 +6,7 @@ import { useStore } from "@/lib/store";
 export function SessionGate({ children }: { children: ReactNode }) {
   const session = useStore((state) => state.session);
   const sessionError = useStore((state) => state.sessionError);
+  const mustChangePassword = useStore((state) => state.mustChangePassword);
   const boot = useStore((state) => state.boot);
 
   useEffect(() => {
@@ -13,14 +14,13 @@ export function SessionGate({ children }: { children: ReactNode }) {
     void boot();
   }, [boot]);
 
+  if (session === "ready" && mustChangePassword) return <ForcePassword />;
   if (session === "ready") return children;
   if (session === "loading") {
     return (
       <Screen>
         <Wordmark className="h-12" />
-        <p className="mt-6 text-sm text-muted">
-          Подключаемся к базе Апекс. Если сервер спал, первый ответ занимает около минуты.
-        </p>
+        <p className="mt-6 text-sm text-muted">Входим…</p>
       </Screen>
     );
   }
@@ -74,13 +74,60 @@ function Login({ error }: { error: string }) {
         </Field>
         {error ? <p className="text-sm text-danger">{error}</p> : null}
         <Button type="submit" className="w-full" disabled={pending}>
-          {pending ? "Ждём сервер…" : "Войти"}
+          {pending ? "Входим…" : "Войти"}
         </Button>
         {error ? (
           <button type="button" className="w-full text-sm font-semibold text-brand" onClick={() => void boot()}>
-            Повторить, если сервер только проснулся
+            Повторить
           </button>
         ) : null}
+      </form>
+    </Screen>
+  );
+}
+
+function ForcePassword() {
+  const changePassword = useStore((state) => state.changePassword);
+  const logout = useStore((state) => state.logout);
+  const [password, setPassword] = useState("");
+  const [again, setAgain] = useState("");
+  const [error, setError] = useState("");
+  const [pending, setPending] = useState(false);
+
+  return (
+    <Screen>
+      <Wordmark className="h-12" />
+      <h1 className="mt-6 text-2xl font-bold tracking-tight">Смените пароль</h1>
+      <p className="mt-2 text-sm text-muted">Это первый вход. Придумайте свой пароль, временный больше не подойдёт.</p>
+      <form
+        className="mt-6 space-y-3"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (password !== again) {
+            setError("Пароли не совпадают");
+            return;
+          }
+          setPending(true);
+          setError("");
+          void changePassword(password).then((result) => {
+            setPending(false);
+            if (!result.ok) setError(result.error);
+          });
+        }}
+      >
+        <Field label="Новый пароль">
+          <TextInput type="password" autoComplete="new-password" value={password} onChange={(event) => setPassword(event.target.value)} required />
+        </Field>
+        <Field label="Ещё раз">
+          <TextInput type="password" autoComplete="new-password" value={again} onChange={(event) => setAgain(event.target.value)} required />
+        </Field>
+        {error ? <p className="text-sm text-danger">{error}</p> : null}
+        <Button type="submit" className="w-full" disabled={pending}>
+          Сохранить пароль
+        </Button>
+        <button type="button" className="w-full text-sm font-semibold text-brand" onClick={() => logout()}>
+          Выйти
+        </button>
       </form>
     </Screen>
   );

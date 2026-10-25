@@ -10,6 +10,8 @@ import type {
   Product,
   Role,
   RoleOption,
+  Ticket,
+  TicketStatus,
 } from "@/lib/store";
 
 const TOKEN_KEY = "apex.token";
@@ -42,10 +44,7 @@ export async function apex(path: string, init?: RequestInit) {
   try {
     response = await fetch(`/api/apex${path}`, { ...init, headers });
   } catch {
-    throw new ApexError(
-      "Нет связи с сервером Апекс. Если он спал, первый ответ занимает около минуты — повторите.",
-      0,
-    );
+    throw new ApexError("Нет связи с сервером. Повторите ещё раз.", 0);
   }
   const text = await response.text();
   let data: unknown = null;
@@ -66,7 +65,7 @@ export function errorText(data: unknown, status: number) {
   if (status === 404) return "На сервере нет таких данных.";
   if (status === 409) return "Данные уже изменились. Обновите и повторите.";
   if (status === 502 || status === 503 || status === 0) {
-    return "Сервер Апекс не ответил. Если он спал, подождите около минуты и повторите.";
+    return "Сервер не ответил. Повторите ещё раз.";
   }
   const message = serverMessage(data);
   return message || `Сервер ответил ошибкой ${status}.`;
@@ -419,7 +418,16 @@ function mapBoard(raw: unknown): BoardRow | null {
   return {
     id,
     name: str(record.fullName || record.name || record.userName || nested || "Сотрудник"),
-    score: num(record.score ?? record.points ?? record.totalPoints ?? record.total ?? record.amount ?? record.value),
+    score: num(
+      record.thanksCount ??
+        record.thanks ??
+        record.score ??
+        record.points ??
+        record.totalPoints ??
+        record.total ??
+        record.amount ??
+        record.value,
+    ),
   };
 }
 
@@ -452,6 +460,7 @@ export interface Workspace {
   roleCatalog: RoleOption[];
   leaderboard: BoardRow[];
   rewardBalance: number | null;
+  mustChangePassword: boolean;
   apiWarnings: string[];
 }
 
@@ -463,6 +472,7 @@ export async function loadWorkspace(): Promise<Workspace> {
     throw new ApexError(`Профиль пришёл в неожиданном виде (${shapeOf(meRaw)}).`, 200);
   }
 
+  const mayReadRoles = me.role === "admin" || me.role === "chief";
   const [
     usersRes,
     personalRes,
@@ -479,7 +489,9 @@ export async function loadWorkspace(): Promise<Workspace> {
   ] = await Promise.all([
     optional("/api/users"),
     optional("/api/balances/me"),
-    optional("/api/admin/balances/me"),
+    me.role === "manager"
+      ? optional("/api/admin/balances/me")
+      : Promise.resolve({ ok: false as const, error: null }),
     optional("/api/balances/me/transactions?skip=0&take=50"),
     optional("/api/products"),
     optional("/api/categories"),
@@ -488,7 +500,7 @@ export async function loadWorkspace(): Promise<Workspace> {
     optional("/api/thanks/for-me"),
     optional("/api/thanks/from-me"),
     optional("/api/leaderboard?limit=20"),
-    optional("/api/roles"),
+    mayReadRoles ? optional("/api/roles") : Promise.resolve({ ok: false as const, error: null }),
   ]);
 
   const personal = personalRes.ok ? amountOf(personalRes.data) : 0;
@@ -604,7 +616,15 @@ export async function loadWorkspace(): Promise<Workspace> {
         })
         .filter((item): item is RoleOption => Boolean(item))
     : [];
-  if (!rolesRes.ok && rolesRes.error instanceof ApexError) warnings.push(`Роли: ${rolesRes.error.message}`);
+  if (
+    mayReadRoles &&
+    !rolesRes.ok &&
+    rolesRes.error instanceof ApexError &&
+    rolesRes.error.status !== 403 &&
+    rolesRes.error.status !== 404
+  ) {
+    warnings.push(`Роли: ${rolesRes.error.message}`);
+  }
 
   const titled = people.get(me.id);
   if (titled && roleCatalog.length) {
@@ -626,6 +646,324 @@ export async function loadWorkspace(): Promise<Workspace> {
     roleCatalog,
     leaderboard,
     rewardBalance,
+    mustChangePassword: passwordChangeRequired(meRaw),
     apiWarnings: warnings,
   };
+}
+
+export interface QuestStepView {
+  id: string;
+  title: string;
+  description: string;
+  completionType: string;
+  sortOrder: number;
+  required: boolean;
+  completed: boolean;
+  proofStatus: string;
+  proofComment: string;
+}
+
+export interface QuestView {
+  id: string;
+  title: string;
+  description: string;
+  reward: number;
+  startAt: string;
+  endAt: string;
+  status: string;
+  rewardClaimed: boolean;
+  steps: QuestStepView[];
+}
+
+export interface SurveyQuestionView {
+  id: string;
+  text: string;
+  type: string;
+  options: string[];
+  required: boolean;
+  sortOrder: number;
+}
+
+export interface SurveyView {
+  id: string;
+  title: string;
+  description: string;
+  questionsCount: number;
+  hasResponded: boolean;
+  canRespond: boolean;
+  allowMultiple: boolean;
+  questions: SurveyQuestionView[];
+}
+
+export interface EventView {
+  id: string;
+  title: string;
+  description: string;
+  startAt: string;
+  endAt: string;
+  location: string;
+  maxParticipants: number | null;
+  registeredCount: number;
+  reward: number;
+  status: string;
+  rewardClaimed: boolean;
+  open: boolean;
+}
+
+export interface AchievementView {
+  id: string;
+  code: string;
+  name: string;
+  description: string;
+  reward: number;
+  conditionType: string;
+  earned: boolean;
+  earnedAt: string;
+}
+
+export interface ActivitiesBundle {
+  quests: QuestView[];
+  surveys: SurveyView[];
+  events: EventView[];
+  achievements: AchievementView[];
+  warnings: string[];
+}
+
+export async function loadActivitiesBundle(userId: string): Promise<ActivitiesBundle> {
+  const warnings: string[] = [];
+  const [questsRes, surveysRes, eventsRes, achievementsRes, mineRes] = await Promise.all([
+    optional("/api/quests?page=1&pageSize=50"),
+    optional("/api/surveys?page=1&pageSize=50"),
+    optional("/api/events?page=1&pageSize=50"),
+    optional("/api/achievements"),
+    optional(`/api/achievements/users/${userId}`),
+  ]);
+  noteFailure(questsRes, "Квесты", warnings);
+  noteFailure(surveysRes, "Опросы", warnings);
+  noteFailure(eventsRes, "Мероприятия", warnings);
+  noteFailure(achievementsRes, "Достижения", warnings);
+  noteFailure(mineRes, "Ваши достижения", warnings);
+
+  const questList = questsRes.ok ? asArray(questsRes.data) : [];
+  const surveyList = surveysRes.ok ? asArray(surveysRes.data) : [];
+  const eventList = eventsRes.ok ? asArray(eventsRes.data) : [];
+
+  const [questDetails, surveyDetails, eventDetails] = await Promise.all([
+    Promise.all(questList.map((item) => detailOf(item, "quests"))),
+    Promise.all(surveyList.map((item) => detailOf(item, "surveys"))),
+    Promise.all(eventList.map((item) => detailOf(item, "events"))),
+  ]);
+
+  const earnedAt = new Map<string, string>();
+  if (mineRes.ok) {
+    for (const item of asArray(mineRes.data)) {
+      const record = obj(item);
+      if (!record) continue;
+      const id = str(record.achievementId || obj(record.achievement)?.id);
+      if (id) earnedAt.set(id, str(record.earnedAt));
+    }
+  }
+
+  return {
+    quests: questList
+      .map((item, index) => mapQuest(item, questDetails[index]))
+      .filter((item): item is QuestView => Boolean(item)),
+    surveys: surveyList
+      .map((item, index) => mapSurvey(item, surveyDetails[index]))
+      .filter((item): item is SurveyView => Boolean(item)),
+    events: eventList
+      .map((item, index) => mapEvent(item, eventDetails[index]))
+      .filter((item): item is EventView => Boolean(item)),
+    achievements: (achievementsRes.ok ? asArray(achievementsRes.data) : [])
+      .map((item) => mapAchievement(item, earnedAt))
+      .filter((item): item is AchievementView => Boolean(item)),
+    warnings,
+  };
+}
+
+function noteFailure(
+  result: { ok: true; data: unknown } | { ok: false; error: unknown },
+  label: string,
+  warnings: string[],
+) {
+  if (result.ok) return;
+  if (result.error instanceof ApexError && result.error.status === 401) throw result.error;
+  if (result.error instanceof ApexError && result.error.status !== 404) {
+    warnings.push(`${label}: ${result.error.message}`);
+  }
+}
+
+async function detailOf(item: unknown, kind: "quests" | "surveys" | "events") {
+  const id = str(obj(item)?.id);
+  if (!id) return null;
+  const result = await optional(`/api/${kind}/${id}`);
+  return result.ok ? result.data : null;
+}
+
+function mapQuest(item: unknown, details: unknown): QuestView | null {
+  const record = obj(details) ?? obj(item);
+  if (!record || record.id == null) return null;
+  const participation = obj(record.participation);
+  const steps = asArray(record.steps)
+    .map((step) => {
+      const row = obj(step);
+      if (!row || row.id == null) return null;
+      return {
+        id: str(row.id),
+        title: str(row.title || "Шаг"),
+        description: str(row.description),
+        completionType: str(row.completionType || "manual"),
+        sortOrder: num(row.sortOrder),
+        required: row.isRequired !== false,
+        completed: Boolean(row.isCompleted),
+        proofStatus: str(row.proofStatus),
+        proofComment: str(row.proofComment),
+      };
+    })
+    .filter((step): step is QuestStepView => Boolean(step))
+    .sort((a, b) => a.sortOrder - b.sortOrder);
+  return {
+    id: str(record.id),
+    title: str(record.title || "Квест"),
+    description: str(record.description),
+    reward: num(record.rewardAmount),
+    startAt: str(record.startAt),
+    endAt: str(record.endAt),
+    status: str(participation?.status || record.participationStatus),
+    rewardClaimed: Boolean(participation?.rewardClaimed),
+    steps,
+  };
+}
+
+function mapSurvey(item: unknown, details: unknown): SurveyView | null {
+  const list = obj(item);
+  const record = obj(details) ?? list;
+  if (!record || record.id == null) return null;
+  const questions = asArray(record.questions)
+    .map((question) => {
+      const row = obj(question);
+      if (!row || row.id == null) return null;
+      return {
+        id: str(row.id),
+        text: str(row.questionText || "Вопрос"),
+        type: str(row.questionType || "text"),
+        options: asArray(row.options).map((option) => str(option)).filter(Boolean),
+        required: row.isRequired !== false,
+        sortOrder: num(row.sortOrder),
+      };
+    })
+    .filter((question): question is SurveyQuestionView => Boolean(question))
+    .sort((a, b) => a.sortOrder - b.sortOrder);
+  return {
+    id: str(record.id),
+    title: str(record.title || list?.title || "Опрос"),
+    description: str(record.description || list?.description),
+    questionsCount: questions.length || num(list?.questionsCount),
+    hasResponded: Boolean(list?.hasResponded) || asArray(record.responses).length > 0,
+    canRespond: list?.canRespond != null ? Boolean(list.canRespond) : record.canRespond !== false,
+    allowMultiple: Boolean(record.allowMultipleResponses ?? list?.allowMultipleResponses),
+    questions,
+  };
+}
+
+function mapEvent(item: unknown, details: unknown): EventView | null {
+  const list = obj(item);
+  const record = obj(details) ?? list;
+  if (!record || record.id == null) return null;
+  const registration = obj(record.registration);
+  const max = record.maxParticipants ?? list?.maxParticipants;
+  return {
+    id: str(record.id),
+    title: str(record.title || "Мероприятие"),
+    description: str(record.description),
+    startAt: str(record.startAt),
+    endAt: str(record.endAt),
+    location: str(record.location),
+    maxParticipants: max == null || max === "" ? null : num(max),
+    registeredCount: num(record.registeredCount),
+    reward: num(record.rewardAmount),
+    status: str(registration?.status || record.registrationStatus || list?.registrationStatus),
+    rewardClaimed: Boolean(registration?.rewardClaimed),
+    open: record.isOpen == null ? true : Boolean(record.isOpen),
+  };
+}
+
+function mapAchievement(item: unknown, earnedAt: Map<string, string>): AchievementView | null {
+  const record = obj(item);
+  if (!record || record.id == null || record.isActive === false) return null;
+  const id = str(record.id);
+  return {
+    id,
+    code: str(record.code),
+    name: str(record.name || "Достижение"),
+    description: str(record.description),
+    reward: num(record.rewardAmount),
+    conditionType: str(record.conditionType),
+    earned: earnedAt.has(id),
+    earnedAt: earnedAt.get(id) ?? "",
+  };
+}
+
+export function passwordChangeRequired(data: unknown) {
+  const record = obj(data);
+  if (!record) return false;
+  const keys = [
+    "mustChangePassword",
+    "must_change_password",
+    "passwordChangeRequired",
+    "requirePasswordChange",
+    "isTemporaryPassword",
+  ];
+  if (keys.some((key) => record[key] === true)) return true;
+  const meta = obj(record.user_metadata) ?? obj(record.userMetadata);
+  return Boolean(meta && keys.some((key) => meta[key] === true));
+}
+
+export function mapTicket(raw: unknown): Ticket | null {
+  const record = obj(raw);
+  if (!record || record.id == null) return null;
+  const messages = asArray(record.messages)
+    .map((item) => {
+      const row = obj(item);
+      if (!row) return null;
+      return {
+        id: str(row.id || `${record.id}-${row.createdAt}`),
+        authorId: str(row.userId),
+        authorName: str(row.userName) || joinName(row),
+        text: str(row.message || row.text),
+        createdAt: str(row.createdAt),
+      };
+    })
+    .filter((item): item is NonNullable<typeof item> => Boolean(item));
+  return {
+    id: str(record.id),
+    userId: str(record.userId),
+    userName: str(record.userName) || joinName(record, "user"),
+    subject: str(record.subject || "Обращение"),
+    status: mapTicketStatus(record.status),
+    createdAt: str(record.createdAt),
+    messages,
+  };
+}
+
+function joinName(record: Record<string, unknown>, prefix = "") {
+  const last = str(record[prefix ? `${prefix}LastName` : "lastName"] || record.userLastName);
+  const first = str(record[prefix ? `${prefix}FirstName` : "firstName"] || record.userFirstName);
+  const middle = str(record[prefix ? `${prefix}MiddleName` : "middleName"] || record.userMiddleName);
+  return [last, first, middle].filter(Boolean).join(" ");
+}
+
+function mapTicketStatus(value: unknown): TicketStatus {
+  const raw = str(value).toLowerCase().replace(/[\s_-]/g, "");
+  if (raw === "inprogress") return "in_progress";
+  if (raw === "resolved") return "resolved";
+  if (raw === "closed") return "closed";
+  return "open";
+}
+
+export function ticketStatusToApi(status: TicketStatus) {
+  if (status === "in_progress") return "InProgress";
+  if (status === "resolved") return "Resolved";
+  if (status === "closed") return "Closed";
+  return "Open";
 }

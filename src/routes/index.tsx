@@ -1,10 +1,10 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { Gem, LifeBuoy, Star } from "lucide-react";
+import { Gem, Star } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Shell } from "@/components/shell";
 import { Button, Panel } from "@/components/ui";
 import { firstName, formatNumber, formatPoints } from "@/lib/format";
-import { useStore, type FeedItem, type Person, type Product } from "@/lib/store";
+import { hasWorkBalance, useStore, type FeedItem, type Person, type Product } from "@/lib/store";
 
 export const Route = createFileRoute("/")({ component: Home });
 
@@ -13,16 +13,19 @@ function Home() {
   const people = useStore((state) => state.people);
   const feed = useStore((state) => state.feed);
   const products = useStore((state) => state.products);
-  const progress = useStore((state) => state.progress);
-  const orders = useStore((state) => state.orders);
   const leaderboard = useStore((state) => state.leaderboard);
-  const warnings = useStore((state) => state.apiWarnings);
+  const catalog = useStore((state) => state.activitiesCatalog);
+  const loadActivities = useStore((state) => state.loadActivities);
   const [helloPart, setHelloPart] = useState("Добрый день");
 
   useEffect(() => {
     const hour = new Date().getHours();
     setHelloPart(hour < 12 ? "Доброе утро" : hour < 18 ? "Добрый день" : "Добрый вечер");
   }, []);
+
+  useEffect(() => {
+    void loadActivities();
+  }, [loadActivities]);
 
   if (!user) return null;
 
@@ -34,20 +37,22 @@ function Home() {
           .sort((a, b) => b.score - a.score)
           .map((person) => ({ id: person.id, name: person.name, score: person.score }));
   const popular = products.filter((product) => product.active && product.popular);
-  const challenges = [
-    { title: "7 дней активности", prize: "Приз: 300 баллов", to: "/activities" as const },
-    { title: "Команда в движении", prize: "Приз: 500 баллов", to: "/activities" as const },
-    { title: "Неделя благодарностей", prize: "Приз: 200 баллов", to: "/colleagues" as const },
-  ];
-  const unlocked = new Set<string>();
-  if (orders.some((order) => order.userId === user.id && order.status !== "cancelled")) unlocked.add("Покупка");
-  if (feed.some((item) => item.fromId === user.id)) unlocked.add("Благодарность");
-  const streak = progress.find((item) => item.userId === user.id && item.activityId === "act-streak");
-  if ((streak?.value ?? 0) >= 7) unlocked.add("Серия");
-  const badges = [
-    { id: "Серия", title: "7 дней" },
-    { id: "Благодарность", title: "Благодарность" },
-    { id: "Покупка", title: "Первая награда" },
+  const activities = [
+    ...catalog.quests.map((item) => ({
+      id: `quest-${item.id}`,
+      title: item.title,
+      prize: item.reward > 0 ? formatPoints(item.reward) : "Квест",
+    })),
+    ...catalog.surveys.map((item) => ({
+      id: `survey-${item.id}`,
+      title: item.title,
+      prize: "Опрос",
+    })),
+    ...catalog.events.map((item) => ({
+      id: `event-${item.id}`,
+      title: item.title,
+      prize: item.reward > 0 ? formatPoints(item.reward) : "Мероприятие",
+    })),
   ];
 
   return (
@@ -56,32 +61,12 @@ function Home() {
         {helloPart}, {firstName(user.name)}!
       </h1>
       <p className="mt-2 text-sm text-muted">Спасибо, что делаете нашу компанию лучше каждый день.</p>
-      {warnings.length > 0 ? (
-        <details className="mt-4 rounded-lg bg-card px-4 py-3 text-sm">
-          <summary className="cursor-pointer font-semibold">Сервер отдал часть данных не так, как ждёт экран</summary>
-          <ul className="mt-2 list-disc space-y-1 pl-4 text-muted">
-            {warnings.map((warning) => (
-              <li key={warning}>{warning}</li>
-            ))}
-          </ul>
-        </details>
-      ) : null}
-      <Link
-        to="/support"
-        className="mt-4 flex min-h-12 items-center gap-3 rounded-xl bg-card px-4 py-3 lg:hidden"
-      >
-        <LifeBuoy className="size-5 shrink-0 text-brand" />
-        <span className="min-w-0">
-          <span className="block text-sm font-semibold">Поддержка</span>
-          <span className="block text-xs text-muted">Вопрос по заказу, баллам или доступу</span>
-        </span>
-      </Link>
 
       <div className="mt-6 hidden items-start gap-4 lg:grid lg:grid-cols-[minmax(0,1fr)_300px]">
         <Leaderboard board={board} />
         <BalanceCard user={user} />
         <div className="min-w-0 space-y-4">
-          <Challenges items={challenges} />
+          <ActivitiesPreview items={activities} loading={catalog.status === "loading" || catalog.status === "idle"} />
           <Feed people={people} feed={feed} />
         </div>
         <Popular products={popular} />
@@ -89,8 +74,8 @@ function Home() {
 
       <div className="mt-6 space-y-4 lg:hidden">
         <BalanceCard user={user} />
-        <Challenges items={challenges} scroll />
-        <Badges badges={badges} unlocked={unlocked} />
+        <ActivitiesPreview items={activities} loading={catalog.status === "loading" || catalog.status === "idle"} scroll />
+        <Achievements items={catalog.achievements} />
         <Leaderboard board={board} />
         <Feed people={people} feed={feed} />
         <Popular products={popular} />
@@ -103,7 +88,7 @@ function Leaderboard({ board }: { board: { id: string; name: string; score: numb
   return (
     <Panel>
       <h2 className="text-xl font-bold">Лидерборд</h2>
-      <p className="mt-1 text-sm text-muted">По данным сервера</p>
+      <p className="mt-1 text-sm text-muted">Топ по числу благодарностей</p>
       {board.length === 0 ? (
         <p className="mt-4 text-sm text-muted">Пока пусто.</p>
       ) : (
@@ -129,13 +114,18 @@ function Leaderboard({ board }: { board: { id: string; name: string; score: numb
 
 function BalanceCard({ user }: { user: Person }) {
   const reward = useStore((state) => state.rewardBalance);
+  const showWork = hasWorkBalance(user.role);
   return (
     <Panel>
-      <h2 className="text-lg font-bold">Балансы</h2>
-      <p className="mt-3 text-xs text-muted">Личный</p>
-      <p className="text-3xl font-bold text-brand">{formatPoints(user.balance)}</p>
-      <p className="mt-3 text-xs text-muted">Рабочий · поощрения</p>
-      <p className="text-xl font-bold">{reward == null ? "нет доступа" : formatPoints(reward)}</p>
+      <h2 className="text-lg font-bold">{showWork ? "Балансы" : "Ваш баланс"}</h2>
+      {showWork ? <p className="mt-3 text-xs text-muted">Личный</p> : null}
+      <p className={`${showWork ? "" : "mt-3"} text-3xl font-bold text-brand`}>{formatPoints(user.balance)}</p>
+      {showWork ? (
+        <>
+          <p className="mt-3 text-xs text-muted">Рабочий · поощрения</p>
+          <p className="text-xl font-bold">{reward == null ? "нет доступа" : formatPoints(reward)}</p>
+        </>
+      ) : null}
       <Link to="/catalog" className="mt-5 block">
         <Button className="w-full">В магазин за призами</Button>
       </Link>
@@ -143,52 +133,51 @@ function BalanceCard({ user }: { user: Person }) {
   );
 }
 
-function Challenges({
+function ActivitiesPreview({
   items,
+  loading,
   scroll = false,
 }: {
-  items: { title: string; prize: string; to: "/activities" | "/colleagues" }[];
+  items: { id: string; title: string; prize: string }[];
+  loading: boolean;
   scroll?: boolean;
 }) {
   return (
     <section className="min-w-0">
-      <h2 className="text-xl font-bold">Активные вызовы</h2>
-      <div className={scroll ? "mt-3 flex gap-3 overflow-x-auto pb-1" : "mt-3 grid grid-cols-3 gap-3"}>
-        {items.map((item) => (
-          <Link
-            key={item.title}
-            to={item.to}
-            className={`rounded-lg bg-card p-4 ${scroll ? "w-56 shrink-0" : ""}`}
-          >
-            <p className="font-bold">{item.title}</p>
-            <p className="mt-8 text-sm text-brand">{item.prize}</p>
-          </Link>
-        ))}
+      <div className="flex items-baseline justify-between gap-3">
+        <h2 className="text-xl font-bold">Активности</h2>
+        <Link to="/activities" className="shrink-0 text-sm font-semibold text-brand">
+          Все
+        </Link>
       </div>
+      {items.length === 0 ? (
+        <p className="mt-3 text-sm text-muted">{loading ? "Загружаем." : "Пока нет активных заданий."}</p>
+      ) : (
+        <div className={scroll ? "mt-3 flex gap-3 overflow-x-auto pb-1" : "mt-3 grid grid-cols-3 gap-3"}>
+          {items.map((item) => (
+            <Link key={item.id} to="/activities" className={`rounded-lg bg-card p-4 ${scroll ? "w-56 shrink-0" : ""}`}>
+              <p className="font-bold">{item.title}</p>
+              <p className="mt-8 text-sm text-brand">{item.prize}</p>
+            </Link>
+          ))}
+        </div>
+      )}
     </section>
   );
 }
 
-function Badges({
-  badges,
-  unlocked,
-}: {
-  badges: { id: string; title: string }[];
-  unlocked: Set<string>;
-}) {
+function Achievements({ items }: { items: { id: string; name: string; earned: boolean }[] }) {
+  if (items.length === 0) return null;
   return (
     <section>
       <h2 className="text-xl font-bold">Достижения</h2>
       <div className="mt-3 grid grid-cols-3 gap-3">
-        {badges.map((badge) => {
-          const on = unlocked.has(badge.id);
-          return (
-            <div key={badge.id} className="rounded-lg bg-card px-2 py-4 text-center">
-              <Star className={`mx-auto size-6 ${on ? "fill-brand text-brand" : "text-brand-soft"}`} />
-              <p className="mt-2 text-xs leading-tight">{badge.title}</p>
-            </div>
-          );
-        })}
+        {items.map((item) => (
+          <Link key={item.id} to="/activities" className="rounded-lg bg-card px-2 py-4 text-center">
+            <Star className={`mx-auto size-6 ${item.earned ? "fill-brand text-brand" : "text-brand-soft"}`} />
+            <p className="mt-2 text-xs leading-tight">{item.name}</p>
+          </Link>
+        ))}
       </div>
     </section>
   );

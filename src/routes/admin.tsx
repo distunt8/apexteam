@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Shell } from "@/components/shell";
 import { Button, Field, TextArea, TextInput } from "@/components/ui";
@@ -8,7 +8,6 @@ import { categoryLabel, ORDER_FLOW, orderStatusLabel, TICKET_STATUS } from "@/li
 import {
   isAdminRole,
   useStore,
-  type Activity,
   type Product,
   type TicketStatus,
 } from "@/lib/store";
@@ -37,7 +36,7 @@ function AdminPage() {
     <Shell mode="shop">
       <h1 className="text-3xl font-bold tracking-tight">Администрирование</h1>
       <p className="mt-2 text-sm text-muted">
-        Вы вошли как {user.name}. Роли и балансы пишутся в базу. Активности и обращения — только в этом браузере.
+        Вы вошли как {user.name}. Роли, балансы, товары, заказы и обращения пишутся в базу.
       </p>
       <div className="mt-4 flex gap-2 overflow-x-auto pb-1">
         {TABS.map((item) => (
@@ -264,10 +263,65 @@ function People() {
   const roles = useStore((state) => state.roleCatalog);
   const setRole = useStore((state) => state.setUserRole);
   const setStatus = useStore((state) => state.setUserStatus);
+  const createEmployee = useStore((state) => state.createEmployee);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [middleName, setMiddleName] = useState("");
+  const [department, setDepartment] = useState("");
+  const [position, setPosition] = useState("");
+  const [pending, setPending] = useState(false);
+
   return (
     <div>
+      <form
+        className="mb-4 grid gap-3 rounded-lg bg-card p-4 sm:grid-cols-2"
+        onSubmit={(event) => {
+          event.preventDefault();
+          setPending(true);
+          void createEmployee({ email, password, firstName, lastName, middleName, department, position }).then((result) => {
+            setPending(false);
+            if (!result.ok) toast.error(result.error);
+            else {
+              toast.success("Сотрудник создан. При первом входе он должен сменить пароль.");
+              setEmail("");
+              setPassword("");
+              setFirstName("");
+              setLastName("");
+              setMiddleName("");
+            }
+          });
+        }}
+      >
+        <h2 className="text-lg font-bold sm:col-span-2">Новый сотрудник</h2>
+        <Field label="Почта">
+          <TextInput type="email" value={email} onChange={(event) => setEmail(event.target.value)} required />
+        </Field>
+        <Field label="Временный пароль">
+          <TextInput type="text" value={password} onChange={(event) => setPassword(event.target.value)} required />
+        </Field>
+        <Field label="Фамилия">
+          <TextInput value={lastName} onChange={(event) => setLastName(event.target.value)} required />
+        </Field>
+        <Field label="Имя">
+          <TextInput value={firstName} onChange={(event) => setFirstName(event.target.value)} required />
+        </Field>
+        <Field label="Отчество">
+          <TextInput value={middleName} onChange={(event) => setMiddleName(event.target.value)} />
+        </Field>
+        <Field label="Отдел">
+          <TextInput value={department} onChange={(event) => setDepartment(event.target.value)} required />
+        </Field>
+        <Field label="Должность">
+          <TextInput value={position} onChange={(event) => setPosition(event.target.value)} required />
+        </Field>
+        <Button type="submit" disabled={pending} className="sm:col-span-2 sm:w-auto">
+          Создать
+        </Button>
+      </form>
       <p className="mb-3 text-sm text-muted">
-        В списке виден только ваш личный баланс: чужие суммы сервер отдельно не отдаёт. Роли берутся из базы.
+        В списке виден только ваш личный баланс: чужие суммы сервер отдельно не отдаёт. Роль новому сотруднику можно назначить ниже.
       </p>
       <div className="overflow-x-auto rounded-lg border border-line">
         <table className="w-full min-w-[760px] text-left text-sm">
@@ -333,75 +387,10 @@ function People() {
 }
 
 function Activities() {
-  const activities = useStore((state) => state.activities);
-  const save = useStore((state) => state.saveActivity);
-  const [title, setTitle] = useState("");
-  const [reward, setReward] = useState(50);
   return (
-    <div>
-      <ul className="space-y-2">
-        {activities.map((activity) => (
-          <ActivityRow key={activity.id} activity={activity} />
-        ))}
-      </ul>
-      <form
-        className="mt-4 flex flex-col gap-3 rounded-lg bg-card p-4 sm:flex-row sm:items-end"
-        onSubmit={(event) => {
-          event.preventDefault();
-          save({
-            id: `act-${Date.now()}`,
-            title,
-            description: "Задание, добавленное администратором. Награда один раз.",
-            category: "event",
-            kind: "once",
-            reward,
-            target: 1,
-            active: true,
-          });
-          setTitle("");
-          toast.success("Активность создана");
-        }}
-      >
-        <Field label="Новая активность">
-          <TextInput value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Название" />
-        </Field>
-        <Field label="Награда">
-          <TextInput inputMode="numeric" value={reward} onChange={(event) => setReward(Number(event.target.value))} />
-        </Field>
-        <Button type="submit">Создать</Button>
-      </form>
-    </div>
-  );
-}
-
-function ActivityRow({ activity }: { activity: Activity }) {
-  const save = useStore((state) => state.saveActivity);
-  const [reward, setReward] = useState(activity.reward);
-  return (
-    <li className="flex flex-wrap items-center gap-3 rounded-lg bg-card px-3 py-3">
-      <div className="min-w-0 flex-1">
-        <p className="font-semibold">{activity.title}</p>
-        <p className="text-xs text-muted">{activity.active ? "Видна сотрудникам" : "Скрыта"}</p>
-      </div>
-      <label className="text-xs text-muted">
-        Награда
-        <input
-          className="ml-2 h-10 w-24 rounded-md border border-line px-2 text-sm text-ink"
-          value={reward}
-          inputMode="numeric"
-          onChange={(event) => setReward(Number(event.target.value))}
-        />
-      </label>
-      <Button
-        variant="line"
-        onClick={() => save({ ...activity, reward, active: !activity.active })}
-      >
-        {activity.active ? "Скрыть" : "Показать"}
-      </Button>
-      <Button variant="soft" onClick={() => save({ ...activity, reward })}>
-        Сохранить награду
-      </Button>
-    </li>
+    <p className="max-w-2xl text-sm text-muted">
+      Квесты, опросы и мероприятия сотрудники видят во вкладке «Активности». Они приходят с сервера. Создавать и править их пока нужно через API.
+    </p>
   );
 }
 
@@ -481,24 +470,31 @@ function Economy() {
 
 function Tickets() {
   const tickets = useStore((state) => state.tickets);
-  const people = useStore((state) => state.people);
+  const ticketsError = useStore((state) => state.ticketsError);
+  const loadTickets = useStore((state) => state.loadTickets);
   const setStatus = useStore((state) => state.setTicketStatus);
+  useEffect(() => {
+    void loadTickets();
+  }, [loadTickets]);
   return (
     <div>
-      <p className="mb-3 text-sm text-muted">
-        Ответы пишутся в разделе поддержки — очередь общая для администраторов.
-      </p>
+      <p className="mb-3 text-sm text-muted">Ответ пишется в карточке обращения.</p>
+      {ticketsError ? <p className="mb-3 text-sm text-danger">{ticketsError}</p> : null}
       <ul className="space-y-2">
         {tickets.map((ticket) => (
           <li key={ticket.id} className="flex flex-wrap items-center gap-3 rounded-lg bg-card px-3 py-3">
             <div className="min-w-0 flex-1">
               <p className="font-semibold">{ticket.subject}</p>
-              <p className="text-xs text-muted">{people.find((person) => person.id === ticket.userId)?.name}</p>
+              <p className="text-xs text-muted">{ticket.userName}</p>
             </div>
             <select
               className="h-10 rounded-md border border-line bg-surface px-2 text-sm"
               value={ticket.status}
-              onChange={(event) => setStatus(ticket.id, event.target.value as TicketStatus)}
+              onChange={(event) => {
+                void setStatus(ticket.id, event.target.value as TicketStatus).then((result) => {
+                  if (!result.ok) toast.error(result.error);
+                });
+              }}
             >
               {(Object.keys(TICKET_STATUS) as TicketStatus[]).map((status) => (
                 <option key={status} value={status}>

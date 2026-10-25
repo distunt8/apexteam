@@ -1,6 +1,5 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import {
-  Bell,
   ChevronDown,
   Gem,
   History,
@@ -16,9 +15,9 @@ import {
 import { useState, type ReactNode } from "react";
 import { Wordmark } from "@/components/logo";
 import { cn } from "@/lib/cn";
-import { formatNumber, formatDateTime } from "@/lib/format";
+import { formatNumber } from "@/lib/format";
 import { ROLE_LABEL } from "@/lib/labels";
-import { isAdminRole, useStore, type Role } from "@/lib/store";
+import { hasWorkBalance, isAdminRole, useStore, type Role } from "@/lib/store";
 
 const TOP = [
   { to: "/", label: "Главная", icon: Home },
@@ -59,9 +58,6 @@ export function Shell({
   const path = useRouterState({ select: (state) => state.location.pathname });
   const user = useStore((state) => state.people.find((person) => person.id === state.currentUserId));
   const cartCount = useStore((state) => state.cart.reduce((sum, item) => sum + item.qty, 0));
-  const unread = useStore((state) =>
-    state.notices.filter((notice) => notice.userId === state.currentUserId && !notice.read).length,
-  );
 
   if (!user) return null;
 
@@ -89,7 +85,6 @@ export function Shell({
             </nav>
             <div className="ml-auto flex items-center gap-1 sm:gap-2">
               <BalanceMenu />
-              <Notices unread={unread} />
               <UserMenu />
             </div>
           </div>
@@ -109,7 +104,6 @@ export function Shell({
               ) : null}
             </Link>
             <BalanceMenu compact />
-            <Notices unread={unread} />
             <UserMenu compact />
           </div>
         </header>
@@ -158,12 +152,14 @@ export function Shell({
                   <span className="tabular">{formatNumber(user.balance)}</span>
                 </p>
               </div>
-              <div>
-                <p className="text-sm text-muted">Рабочий · поощрения</p>
-                <p className="mt-1 text-lg font-bold tabular">
-                  <RewardAmount />
-                </p>
-              </div>
+              {hasWorkBalance(user.role) ? (
+                <div>
+                  <p className="text-sm text-muted">Рабочий · поощрения</p>
+                  <p className="mt-1 text-lg font-bold tabular">
+                    <RewardAmount />
+                  </p>
+                </div>
+              ) : null}
             </div>
           </aside>
         ) : null}
@@ -207,6 +203,16 @@ function BalanceMenu({ compact = false }: { compact?: boolean }) {
   const user = useStore((state) => state.people.find((person) => person.id === state.currentUserId));
   const reward = useStore((state) => state.rewardBalance);
   if (!user) return null;
+  const showWork = hasWorkBalance(user.role);
+  if (!showWork) {
+    return (
+      <div className="flex min-h-11 items-center gap-1.5 px-2 text-sm">
+        <Gem className="size-4 text-brand" />
+        <span className="tabular font-semibold">{formatNumber(user.balance)}</span>
+        {compact ? null : <span className="hidden text-muted sm:inline">баллов</span>}
+      </div>
+    );
+  }
   return (
     <div className="relative">
       <button
@@ -229,49 +235,6 @@ function BalanceMenu({ compact = false }: { compact?: boolean }) {
             {reward == null ? <span className="text-base font-medium text-muted">нет доступа</span> : formatNumber(reward)}
           </p>
           <p className="mt-2 text-xs text-muted">Покупки списывают личный. Поощрения — с рабочего.</p>
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-function Notices({ unread }: { unread: number }) {
-  const [open, setOpen] = useState(false);
-  const userId = useStore((state) => state.currentUserId);
-  const noticeList = useStore((state) => state.notices);
-  const notices = noticeList.filter((notice) => notice.userId === userId).slice(0, 8);
-  const mark = useStore((state) => state.markNoticesRead);
-
-  return (
-    <div className="relative">
-      <button
-        type="button"
-        className="relative grid size-11 place-items-center rounded-md hover:bg-card"
-        aria-label="Уведомления"
-        onClick={() => {
-          setOpen((value) => !value);
-          mark();
-        }}
-      >
-        <Bell className="size-5" />
-        {unread > 0 ? (
-          <span className="absolute top-2 right-2 size-2 rounded-full bg-brand" />
-        ) : null}
-      </button>
-      {open ? (
-        <div className="absolute right-0 z-40 mt-1 w-[min(100vw-2rem,22rem)] rounded-lg border border-line bg-surface p-2 shadow-lg">
-          {notices.length === 0 ? (
-            <p className="px-2 py-4 text-sm text-muted">Пока пусто</p>
-          ) : (
-            <ul className="max-h-80 space-y-1 overflow-auto">
-              {notices.map((notice) => (
-                <li key={notice.id} className="rounded-md px-2 py-2 text-sm hover:bg-card">
-                  <p>{notice.text}</p>
-                  <p className="mt-1 text-xs text-muted">{formatDateTime(notice.createdAt)}</p>
-                </li>
-              ))}
-            </ul>
-          )}
         </div>
       ) : null}
     </div>
@@ -313,6 +276,7 @@ function UserMenu({ compact = false }: { compact?: boolean }) {
           <p className="px-2 pt-1 text-sm font-medium">{user.name}</p>
           <p className="px-2 pb-1 text-xs text-muted">{title}</p>
           <div className="my-1 h-px bg-line" />
+          <MenuLink to="/profile" icon={<UserRound className="size-4" />} label="Профиль" onDone={() => setOpen(false)} />
           <MenuLink to="/history" icon={<History className="size-4" />} label="История" onDone={() => setOpen(false)} />
           <MenuLink to="/orders" icon={<ShoppingBag className="size-4" />} label="Заказы" onDone={() => setOpen(false)} />
           <MenuLink to="/support" icon={<LifeBuoy className="size-4" />} label="Поддержка" onDone={() => setOpen(false)} />
@@ -347,7 +311,7 @@ function MenuLink({
   icon,
   onDone,
 }: {
-  to: "/" | "/history" | "/orders" | "/support" | "/admin";
+  to: "/" | "/history" | "/orders" | "/support" | "/admin" | "/profile";
   label: string;
   icon: ReactNode;
   onDone: () => void;

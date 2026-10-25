@@ -1,47 +1,55 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Shell } from "@/components/shell";
 import { Button, Field, Panel, TextArea, TextInput } from "@/components/ui";
 import { formatDateTime } from "@/lib/format";
 import { TICKET_STATUS } from "@/lib/labels";
-import { isAdminRole, useStore } from "@/lib/store";
+import { isAdminRole, useStore, type TicketStatus } from "@/lib/store";
 
 export const Route = createFileRoute("/support")({ component: SupportPage });
 
 function SupportPage() {
   const user = useStore((state) => state.people.find((person) => person.id === state.currentUserId));
-  const people = useStore((state) => state.people);
   const tickets = useStore((state) => state.tickets);
+  const ticketsError = useStore((state) => state.ticketsError);
+  const loadTickets = useStore((state) => state.loadTickets);
   const createTicket = useStore((state) => state.createTicket);
   const reply = useStore((state) => state.replyTicket);
+  const setStatus = useStore((state) => state.setTicketStatus);
   const [subject, setSubject] = useState("");
   const [text, setText] = useState("");
   const [openId, setOpenId] = useState<string | null>(null);
   const [answer, setAnswer] = useState("");
-  if (!user) return null;
+  const [pending, setPending] = useState(false);
 
-  const visible = isAdminRole(user.role) ? tickets : tickets.filter((ticket) => ticket.userId === user.id);
-  const current = visible.find((ticket) => ticket.id === openId) ?? visible[0];
+  useEffect(() => {
+    void loadTickets();
+  }, [loadTickets]);
+
+  if (!user) return null;
+  const current = tickets.find((ticket) => ticket.id === openId) ?? tickets[0];
 
   return (
     <Shell mode="shop">
       <h1 className="text-3xl font-bold tracking-tight">Поддержка</h1>
-      <p className="mt-2 text-sm text-muted">
-        Напишите вопрос. Ответ придёт в это же обращение. Обращения пока хранятся только в этом браузере — в базе такого раздела нет.
-      </p>
+      <p className="mt-2 text-sm text-muted">Напишите вопрос. Ответ придёт в это же обращение.</p>
+      {ticketsError ? <p className="mt-3 text-sm text-danger">{ticketsError}</p> : null}
 
       <form
         className="mt-5 grid gap-3 rounded-lg bg-card p-4"
         onSubmit={(event) => {
           event.preventDefault();
-          const result = createTicket(subject, text);
-          if (!result.ok) toast.error(result.error);
-          else {
-            toast.success("Обращение создано");
-            setSubject("");
-            setText("");
-          }
+          setPending(true);
+          void createTicket(subject, text).then((result) => {
+            setPending(false);
+            if (!result.ok) toast.error(result.error);
+            else {
+              toast.success("Обращение создано");
+              setSubject("");
+              setText("");
+            }
+          });
         }}
       >
         <Field label="Тема">
@@ -50,15 +58,15 @@ function SupportPage() {
         <Field label="Описание">
           <TextArea value={text} onChange={(event) => setText(event.target.value)} placeholder="Что произошло и чем помочь" />
         </Field>
-        <Button type="submit" className="w-full sm:w-auto">
+        <Button type="submit" className="w-full sm:w-auto" disabled={pending}>
           Отправить обращение
         </Button>
       </form>
 
       <div className="mt-6 grid items-start gap-4 lg:grid-cols-[260px_minmax(0,1fr)]">
         <ul className="space-y-2">
-          {visible.length === 0 ? <li className="text-sm text-muted">Обращений пока нет.</li> : null}
-          {visible.map((ticket) => (
+          {tickets.length === 0 ? <li className="text-sm text-muted">Обращений пока нет.</li> : null}
+          {tickets.map((ticket) => (
             <li key={ticket.id}>
               <button
                 type="button"
@@ -75,39 +83,53 @@ function SupportPage() {
           <Panel>
             <h2 className="font-bold">{current.subject}</h2>
             <p className="mt-1 text-xs text-muted">
-              {people.find((person) => person.id === current.userId)?.name} · {TICKET_STATUS[current.status]}
+              {current.userName || "Сотрудник"} · {TICKET_STATUS[current.status]}
             </p>
-            <ul className="mt-4 space-y-3">
-              {current.messages.map((message) => {
-                const author = people.find((person) => person.id === message.authorId);
-                return (
-                  <li key={message.id} className="rounded-md bg-surface px-3 py-2">
-                    <p className="text-xs font-semibold text-brand-deep">{author?.name}</p>
-                    <p className="mt-1 text-sm">{message.text}</p>
-                    <p className="mt-1 text-xs text-muted">{formatDateTime(message.createdAt)}</p>
-                  </li>
-                );
-              })}
-            </ul>
             {isAdminRole(user.role) ? (
-              <form
-                className="mt-4"
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  const result = reply(current.id, answer);
+              <select
+                className="mt-3 h-10 rounded-md border border-line bg-surface px-2 text-sm"
+                value={current.status}
+                onChange={(event) => {
+                  const status = event.target.value as TicketStatus;
+                  void setStatus(current.id, status).then((result) => {
+                    if (!result.ok) toast.error(result.error);
+                  });
+                }}
+              >
+                {(Object.keys(TICKET_STATUS) as TicketStatus[]).map((status) => (
+                  <option key={status} value={status}>
+                    {TICKET_STATUS[status]}
+                  </option>
+                ))}
+              </select>
+            ) : null}
+            <ul className="mt-4 space-y-3">
+              {current.messages.map((message) => (
+                <li key={message.id} className="rounded-md bg-surface px-3 py-2">
+                  <p className="text-xs font-semibold text-brand-deep">{message.authorName || "Сотрудник"}</p>
+                  <p className="mt-1 text-sm">{message.text}</p>
+                  <p className="mt-1 text-xs text-muted">{message.createdAt ? formatDateTime(message.createdAt) : ""}</p>
+                </li>
+              ))}
+            </ul>
+            <form
+              className="mt-4"
+              onSubmit={(event) => {
+                event.preventDefault();
+                void reply(current.id, answer).then((result) => {
                   if (!result.ok) toast.error(result.error);
                   else {
                     setAnswer("");
-                    toast.success("Ответ отправлен");
+                    toast.success("Сообщение отправлено");
                   }
-                }}
-              >
-                <TextArea value={answer} onChange={(event) => setAnswer(event.target.value)} placeholder="Ответ сотруднику" />
-                <Button type="submit" className="mt-2">
-                  Ответить
-                </Button>
-              </form>
-            ) : null}
+                });
+              }}
+            >
+              <TextArea value={answer} onChange={(event) => setAnswer(event.target.value)} placeholder="Сообщение" />
+              <Button type="submit" className="mt-2">
+                Отправить
+              </Button>
+            </form>
           </Panel>
         ) : null}
       </div>

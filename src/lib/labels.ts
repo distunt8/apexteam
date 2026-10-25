@@ -32,7 +32,8 @@ export function orderStatusLabel(status: string) {
 
 export const TICKET_STATUS: Record<TicketStatus, string> = {
   open: "Открыто",
-  answered: "Есть ответ",
+  in_progress: "В работе",
+  resolved: "Решено",
   closed: "Закрыто",
 };
 
