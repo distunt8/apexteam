@@ -1,5 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { Minus, Plus, Trash2 } from "lucide-react";
+import { useState } from "react";
 import { toast } from "sonner";
 import { Shell } from "@/components/shell";
 import { Button, Panel } from "@/components/ui";
@@ -17,6 +18,7 @@ function CartPage() {
   const setQty = useStore((state) => state.setQty);
   const checkout = useStore((state) => state.checkout);
   const navigate = useNavigate();
+  const [pending, setPending] = useState(false);
 
   const lines = cart
     .map((item) => {
@@ -87,11 +89,15 @@ function CartPage() {
             <p className="text-sm text-muted">К оплате</p>
             <p className="mt-1 text-2xl font-bold text-brand">{formatPoints(total)}</p>
             <p className="mt-2 text-sm text-muted">На балансе {formatNumber(balance)}</p>
-            {short ? <p className="mt-3 text-sm text-danger">Недостаточно баллов. Уберите позицию или заработайте ещё.</p> : null}
+            {short ? <p className="mt-3 text-sm text-danger">Недостаточно апексов. Уберите позицию или заработайте ещё.</p> : null}
             <Button
               className="mt-4 w-full"
+              disabled={short || pending}
               onClick={() => {
+                if (pending) return;
+                setPending(true);
                 void checkout().then((result) => {
+                  setPending(false);
                   if (!result.ok) toast.error(result.error);
                   else {
                     toast.success("Заказ оформлен");
@@ -100,7 +106,7 @@ function CartPage() {
                 });
               }}
             >
-              Оплатить баллами
+              {pending ? "Оформляем…" : "Оплатить апексами"}
             </Button>
           </Panel>
         </div>

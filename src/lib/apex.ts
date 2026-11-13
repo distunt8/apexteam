@@ -39,7 +39,7 @@ export async function apex(path: string, init?: RequestInit) {
   const headers = new Headers(init?.headers);
   const token = readToken();
   if (token) headers.set("authorization", `Bearer ${token}`);
-  if (init?.body && !headers.has("content-type")) headers.set("content-type", "application/json");
+  if (init?.body && !(init.body instanceof FormData) && !headers.has("content-type")) headers.set("content-type", "application/json");
   let response: Response;
   try {
     response = await fetch(`/api/apex${path}`, { ...init, headers });
@@ -60,6 +60,8 @@ export async function apex(path: string, init?: RequestInit) {
 }
 
 export function errorText(data: unknown, status: number) {
+  const message = serverMessage(data);
+  if (/заблок|is_active|isactive|inactive|деактив/i.test(message)) return BLOCKED_ACCOUNT;
   if (status === 401) return "Неверный email или пароль, либо сессия закончилась.";
   if (status === 403) return "Недостаточно прав для этого действия.";
   if (status === 404) return "На сервере нет таких данных.";
@@ -67,7 +69,6 @@ export function errorText(data: unknown, status: number) {
   if (status === 502 || status === 503 || status === 0) {
     return "Сервер не ответил. Повторите ещё раз.";
   }
-  const message = serverMessage(data);
   return message || `Сервер ответил ошибкой ${status}.`;
 }
 
@@ -168,6 +169,10 @@ function asArray(data: unknown): unknown[] {
   return [];
 }
 
+export function listOf(data: unknown) {
+  return asArray(data);
+}
+
 function str(value: unknown) {
   return typeof value === "string" ? value : value == null ? "" : String(value);
 }
@@ -203,15 +208,23 @@ const FALLBACKS = [
 
 function mapRole(codes: string[], canAdmin: boolean): Role {
   const folded = codes.map((code) => code.toLowerCase());
-  if (folded.some((code) => /chief|super|owner|director|главн/.test(code))) return "chief";
-  if (canAdmin || folded.some((code) => code.includes("admin"))) return "admin";
-  if (folded.some((code) => /manager|lead|supervisor|hr|руковод/.test(code))) return "manager";
+  const has = (pattern: RegExp) => folded.some((code) => pattern.test(code));
+  if (has(/superadmin|super-admin|chief|owner/)) return "chief";
+  if (has(/^admin$|administrator/)) return "admin";
+  if (has(/humanresources|^hr$/)) return "hr";
+  if (has(/merchandiser|^merch$/)) return "merchandiser";
+  if (has(/supportoperator|support[-_ ]?operator|^support$|^operator$|helpdesk/)) return "support";
+  if (has(/manager|lead|supervisor|руковод/)) return "manager";
+  if (canAdmin) return "admin";
   return "employee";
 }
 
 const ROLE_TITLE: Record<Role, string> = {
   employee: "Сотрудник",
   manager: "Руководитель",
+  hr: "HR",
+  merchandiser: "Мерчендайзер",
+  support: "Оператор поддержки",
   admin: "Администратор",
   chief: "Главный администратор",
 };
@@ -244,9 +257,17 @@ function mapUser(raw: unknown, balance = 0, score = 0, budget = 0): Person | nul
     score,
     budget,
     budgetLimit: 0,
-    status: record.isActive === false ? "blocked" : "active",
+    status: inactiveUser(record) ? "blocked" : "active",
   };
 }
+
+function inactiveUser(record: Record<string, unknown>) {
+  if (record.isActive === false || record.isActive === "false" || record.isActive === 0) return true;
+  const status = str(record.status).toLowerCase();
+  return status === "blocked" || status === "inactive" || status === "disabled";
+}
+
+export const BLOCKED_ACCOUNT = "Аккаунт заблокирован. Вход недоступен.";
 
 function mapCategory(raw: unknown): CategoryRow | null {
   const record = obj(raw);
@@ -293,37 +314,40 @@ function mapCartItem(raw: unknown): CartItem | null {
 }
 
 function mapStatus(value: string) {
-  const key = value.trim().toLowerCase();
+  const key = value.trim().toLowerCase().replace(/[\s-]/g, "");
   const table: Record<string, string> = {
+    paid: "paid",
+    pending: "pending",
     created: "created",
     new: "created",
-    pending: "created",
     processing: "processing",
     inprogress: "processing",
-    in_progress: "processing",
     ready: "ready",
+    completed: "completed",
     issued: "issued",
-    completed: "issued",
     done: "issued",
     delivered: "issued",
     cancelled: "cancelled",
     canceled: "cancelled",
   };
-  return table[key] ?? (value || "created");
+  return table[key] ?? (value || "paid");
 }
 
 export function statusToApi(status: string) {
   const table: Record<string, string> = {
+    paid: "Paid",
+    pending: "Pending",
     created: "Created",
     processing: "Processing",
     ready: "Ready",
+    completed: "Completed",
     issued: "Issued",
     cancelled: "Cancelled",
   };
   return table[status] ?? status;
 }
 
-function mapOrder(raw: unknown, fallbackUserId: string): Order | null {
+export function mapOrder(raw: unknown, fallbackUserId: string): Order | null {
   const record = obj(raw);
   if (!record) return null;
   const id = record.id ?? record.orderId;
@@ -335,8 +359,8 @@ function mapOrder(raw: unknown, fallbackUserId: string): Order | null {
       const product = obj(line.product);
       const mapped: OrderItem = {
         productId: str(line.productId ?? product?.id ?? ""),
-        title: str(line.name || line.title || product?.name || "Товар"),
-        price: num(line.price ?? line.unitPrice ?? product?.price),
+        title: str(line.productName || line.name || line.title || product?.name || "Товар"),
+        price: num(line.priceAtPurchase ?? line.price ?? line.unitPrice ?? product?.price),
         qty: Math.max(1, num(line.quantity ?? line.qty ?? 1)),
       };
       return mapped;
@@ -347,7 +371,9 @@ function mapOrder(raw: unknown, fallbackUserId: string): Order | null {
     id: str(id),
     userId: str(record.userId || fallbackUserId),
     items,
-    total: record.total != null || record.totalPrice != null ? num(record.total ?? record.totalPrice) : computed,
+    total: record.totalAmount != null || record.total != null || record.totalPrice != null
+      ? num(record.totalAmount ?? record.total ?? record.totalPrice)
+      : computed,
     status: mapStatus(str(record.status || record.orderStatus || "created")),
     createdAt: str(record.createdAt || new Date().toISOString()),
   };
@@ -364,15 +390,16 @@ function mapEntryType(amount: number, hint: string): LedgerEntry["type"] {
   return amount < 0 ? "purchase" : "activity_reward";
 }
 
-function mapTransaction(raw: unknown, userId: string): LedgerEntry | null {
+export function mapTransaction(raw: unknown, userId: string): LedgerEntry | null {
   const record = obj(raw);
   if (!record || record.id == null) return null;
   const amount = num(record.amount);
   const description = str(record.description);
   const related = str(record.relatedEntityType);
+  const owner = str(record.userId || userId);
   return {
     id: str(record.id),
-    userId,
+    userId: owner,
     type: mapEntryType(amount, `${related} ${description}`),
     amount,
     reason: description || related || "Операция",
@@ -404,6 +431,27 @@ function mapThank(raw: unknown): FeedItem | null {
     amount: num(record.amount ?? record.points),
     message: str(record.message || record.text),
     kind: /manager|bonus|поощр/.test(kindBlob) ? "manager" : "peer",
+    createdAt: str(record.createdAt || new Date().toISOString()),
+  };
+}
+
+function mapManagerBonus(raw: unknown, userId: string): FeedItem | null {
+  const record = obj(raw);
+  if (!record || record.id == null) return null;
+  const type = str(record.relatedEntityType).toLowerCase().replace(/[\s_-]/g, "");
+  if (type !== "managerbonus") return null;
+  const amount = num(record.amount);
+  if (!amount) return null;
+  const owner = str(record.userId || userId);
+  const other = str(record.relatedUserId);
+  const incoming = amount > 0;
+  return {
+    id: `bonus-${record.id}`,
+    fromId: incoming ? other : owner,
+    toId: incoming ? owner : other,
+    amount: Math.abs(amount),
+    message: str(record.description),
+    kind: "manager",
     createdAt: str(record.createdAt || new Date().toISOString()),
   };
 }
@@ -459,9 +507,12 @@ export interface Workspace {
   feed: FeedItem[];
   roleCatalog: RoleOption[];
   leaderboard: BoardRow[];
+  departmentIds: string[];
   rewardBalance: number | null;
   mustChangePassword: boolean;
   apiWarnings: string[];
+  engagement: EngagementView | null;
+  engagementError: string;
 }
 
 export async function loadWorkspace(): Promise<Workspace> {
@@ -471,10 +522,12 @@ export async function loadWorkspace(): Promise<Workspace> {
   if (!me) {
     throw new ApexError(`Профиль пришёл в неожиданном виде (${shapeOf(meRaw)}).`, 200);
   }
+  if (me.status === "blocked") throw new ApexError(BLOCKED_ACCOUNT, 403);
 
-  const mayReadRoles = me.role === "admin" || me.role === "chief";
+  const mayReadRoles = me.role === "chief";
   const [
     usersRes,
+    departmentRes,
     personalRes,
     rewardRes,
     txRes,
@@ -486,21 +539,24 @@ export async function loadWorkspace(): Promise<Workspace> {
     outRes,
     boardRes,
     rolesRes,
+    engagementRes,
   ] = await Promise.all([
     optional("/api/users"),
+    me.role === "manager" ? optional("/api/users/my-department") : Promise.resolve({ ok: false as const, error: null }),
     optional("/api/balances/me"),
     me.role === "manager"
       ? optional("/api/admin/balances/me")
       : Promise.resolve({ ok: false as const, error: null }),
     optional("/api/balances/me/transactions?skip=0&take=50"),
-    optional("/api/products"),
+    optional(me.role === "admin" || me.role === "chief" || me.role === "merchandiser" ? "/api/products/all" : "/api/products"),
     optional("/api/categories"),
     optional("/api/cart"),
-    optional("/api/orders"),
+    optional("/api/orders/history"),
     optional("/api/thanks/for-me"),
     optional("/api/thanks/from-me"),
-    optional("/api/leaderboard?limit=20"),
+    optional("/api/leaderboard?limit=6"),
     mayReadRoles ? optional("/api/roles") : Promise.resolve({ ok: false as const, error: null }),
+    optional("/api/me/engagement"),
   ]);
 
   const personal = personalRes.ok ? amountOf(personalRes.data) : 0;
@@ -526,6 +582,15 @@ export async function loadWorkspace(): Promise<Workspace> {
     }
   } else if (usersRes.error instanceof ApexError && usersRes.error.status !== 404) {
     warnings.push(`Список сотрудников: ${usersRes.error.message}`);
+  }
+  const departmentIds: string[] = [];
+  if (departmentRes.ok) {
+    for (const item of asArray(departmentRes.data)) {
+      const person = mapUser(item);
+      if (!person) continue;
+      departmentIds.push(person.id);
+      if (!people.has(person.id)) people.set(person.id, person);
+    }
   }
   const self = people.get(me.id);
   people.set(me.id, { ...(self ?? me), ...me, balance: personal, budget: rewardBalance ?? 0 });
@@ -589,6 +654,12 @@ export async function loadWorkspace(): Promise<Workspace> {
       if (thank) feedMap.set(thank.id, thank);
     }
   }
+  if (txRes.ok) {
+    for (const item of noteList(txRes.data, "Поощрения", [])) {
+      const bonus = mapManagerBonus(item, me.id);
+      if (bonus) feedMap.set(bonus.id, bonus);
+    }
+  }
   const feed = [...feedMap.values()].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   for (const item of feed) {
     if (!item.fromName) item.fromName = people.get(item.fromId)?.name;
@@ -634,6 +705,16 @@ export async function loadWorkspace(): Promise<Workspace> {
     if (names.length) titled.roleTitle = names.join(", ");
   }
 
+  const engagement = engagementRes.ok ? mapEngagement(engagementRes.data) : null;
+  const engagementError = engagement
+    ? ""
+    : engagementRes.ok
+      ? "Сервер не прислал уровень активности"
+      : engagementRes.error instanceof Error
+        ? engagementRes.error.message
+        : "Не удалось загрузить уровень активности";
+  if (engagementError) warnings.push(`Уровень активности: ${engagementError}`);
+
   return {
     currentUserId: me.id,
     people: [...people.values()],
@@ -645,9 +726,12 @@ export async function loadWorkspace(): Promise<Workspace> {
     feed,
     roleCatalog,
     leaderboard,
+    departmentIds,
     rewardBalance,
     mustChangePassword: passwordChangeRequired(meRaw),
     apiWarnings: warnings,
+    engagement,
+    engagementError,
   };
 }
 
@@ -660,6 +744,7 @@ export interface QuestStepView {
   required: boolean;
   completed: boolean;
   proofStatus: string;
+  proofPath: string;
   proofComment: string;
 }
 
@@ -688,6 +773,7 @@ export interface SurveyView {
   id: string;
   title: string;
   description: string;
+  reward: number;
   questionsCount: number;
   hasResponded: boolean;
   canRespond: boolean;
@@ -816,7 +902,8 @@ function mapQuest(item: unknown, details: unknown): QuestView | null {
         sortOrder: num(row.sortOrder),
         required: row.isRequired !== false,
         completed: Boolean(row.isCompleted),
-        proofStatus: str(row.proofStatus),
+        proofStatus: str(row.proofStatus).toLowerCase(),
+        proofPath: str(row.proofStoragePath),
         proofComment: str(row.proofComment),
       };
     })
@@ -858,6 +945,7 @@ function mapSurvey(item: unknown, details: unknown): SurveyView | null {
     id: str(record.id),
     title: str(record.title || list?.title || "Опрос"),
     description: str(record.description || list?.description),
+    reward: num(record.rewardAmount ?? list?.rewardAmount),
     questionsCount: questions.length || num(list?.questionsCount),
     hasResponded: Boolean(list?.hasResponded) || asArray(record.responses).length > 0,
     canRespond: list?.canRespond != null ? Boolean(list.canRespond) : record.canRespond !== false,
@@ -904,6 +992,60 @@ function mapAchievement(item: unknown, earnedAt: Map<string, string>): Achieveme
   };
 }
 
+export interface EngagementBreakdown {
+  code: string;
+  title: string;
+  count: number;
+  points: number;
+  maxPoints: number;
+}
+
+export interface EngagementView {
+  title: string;
+  code: string;
+  rank: number;
+  score: number;
+  maxScore: number;
+  nextTitle: string;
+  pointsToNext: number | null;
+  progress: number;
+  periodDays: number;
+  breakdown: EngagementBreakdown[];
+}
+
+export function mapEngagement(raw: unknown): EngagementView | null {
+  const record = obj(raw);
+  const status = record ? obj(record.status) : null;
+  if (!record || !status) return null;
+  const next = obj(record.nextLevel);
+  const period = obj(record.period);
+  const breakdown = asArray(record.breakdown)
+    .map((item) => {
+      const row = obj(item);
+      if (!row) return null;
+      return {
+        code: str(row.code),
+        title: str(row.title || row.code || "Источник"),
+        count: num(row.count),
+        points: num(row.points),
+        maxPoints: num(row.maxPoints),
+      };
+    })
+    .filter((item): item is EngagementBreakdown => Boolean(item));
+  return {
+    title: str(status.title || "Уровень"),
+    code: str(status.code),
+    rank: Math.min(5, Math.max(1, num(status.rank) || 1)),
+    score: num(record.score),
+    maxScore: num(record.maxScore) || 100,
+    nextTitle: next ? str(next.title) : "",
+    pointsToNext: next ? num(next.pointsToNext) : null,
+    progress: next ? Math.min(1, Math.max(0, num(next.progress))) : 1,
+    periodDays: period ? num(period.days) || 30 : 30,
+    breakdown,
+  };
+}
+
 export function passwordChangeRequired(data: unknown) {
   const record = obj(data);
   if (!record) return false;
@@ -922,23 +1064,34 @@ export function passwordChangeRequired(data: unknown) {
 export function mapTicket(raw: unknown): Ticket | null {
   const record = obj(raw);
   if (!record || record.id == null) return null;
-  const messages = asArray(record.messages)
-    .map((item) => {
-      const row = obj(item);
-      if (!row) return null;
-      return {
-        id: str(row.id || `${record.id}-${row.createdAt}`),
-        authorId: str(row.userId),
-        authorName: str(row.userName) || joinName(row),
-        text: str(row.message || row.text),
-        createdAt: str(row.createdAt),
-      };
-    })
-    .filter((item): item is NonNullable<typeof item> => Boolean(item));
+  const messages = [];
+  const seen = new Set<string>();
+  for (const item of asArray(record.messages)) {
+    const row = obj(item);
+    if (!row) continue;
+    const text = str(row.message || row.text);
+    const createdAt = str(row.createdAt);
+    const authorId = str(row.userId);
+    const id = str(row.id || `${record.id}-${createdAt}-${text}`);
+    const stamp = Date.parse(createdAt);
+    const burst = `${authorId}|${text}|${Number.isNaN(stamp) ? createdAt : Math.floor(stamp / 2000)}`;
+    if (seen.has(id) || seen.has(burst)) continue;
+    seen.add(id);
+    seen.add(burst);
+    messages.push({
+      id,
+      authorId,
+      authorName: str(row.userName) || joinName(row),
+      text,
+      createdAt,
+    });
+  }
   return {
     id: str(record.id),
     userId: str(record.userId),
     userName: str(record.userName) || joinName(record, "user"),
+    assignedTo: str(record.assignedTo),
+    assignedName: str(record.assignedToName) || joinName(record, "assignedTo"),
     subject: str(record.subject || "Обращение"),
     status: mapTicketStatus(record.status),
     createdAt: str(record.createdAt),

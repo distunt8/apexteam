@@ -2,6 +2,7 @@ import { createRootRoute, HeadContent, Outlet, Scripts } from "@tanstack/react-r
 import { AuthProvider } from "@/lib/auth/provider";
 import { PreviewHostBridge } from "@/components/preview-host-bridge";
 import { SessionGate } from "@/components/auth-gate";
+import { THEME_BOOT, ThemeProvider, useTheme } from "@/lib/theme";
 import { Toaster } from "sonner";
 import appCss from "../styles.css?url";
 
@@ -13,7 +14,7 @@ export const Route = createRootRoute({
       { title: "Апекс — платформа вовлечённости" },
       {
         name: "description",
-        content: "Корпоративная платформа: баллы, благодарности, активности и каталог наград.",
+        content: "Корпоративная платформа: апексы, благодарности, активности и каталог наград.",
       },
       { name: "theme-color", content: "#306CC0" },
     ],
@@ -30,21 +31,33 @@ export const Route = createRootRoute({
       { rel: "apple-touch-icon", href: "/__grok/icon-180.png" },
     ],
   }),
-  component: () => (
+  component: RootDocument,
+});
+
+function RootDocument() {
+  return (
     <html lang="ru" suppressHydrationWarning>
       <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_BOOT }} />
         <HeadContent />
       </head>
       <body>
-        <PreviewHostBridge />
-        <AuthProvider>
-          <SessionGate>
-            <Outlet />
-          </SessionGate>
-        </AuthProvider>
-        <Toaster position="top-center" richColors closeButton />
+        <ThemeProvider>
+          <PreviewHostBridge />
+          <AuthProvider>
+            <SessionGate>
+              <Outlet />
+            </SessionGate>
+          </AuthProvider>
+          <ThemedToaster />
+        </ThemeProvider>
         <Scripts />
       </body>
     </html>
-  ),
-});
+  );
+}
+
+function ThemedToaster() {
+  const { resolved } = useTheme();
+  return <Toaster position="top-center" richColors closeButton theme={resolved} />;
+}

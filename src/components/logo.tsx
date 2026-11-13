@@ -5,7 +5,7 @@ export function Wordmark({ className }: { className?: string }) {
     <img
       src="/brand/logo.png"
       alt="Апекс"
-      className={cn("h-10 w-auto", className)}
+      className={cn("apex-wordmark h-10 w-auto", className)}
     />
   );
 }

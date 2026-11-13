@@ -26,7 +26,15 @@ function apexProxyPlugin(): Plugin {
         }
         try {
           const chunks: Buffer[] = [];
+          let size = 0;
           for await (const chunk of req) {
+            size += chunk.length;
+            if ((/\/users\/[^/]+\/avatar$/.test(pathOnly) || pathOnly === "/api/apex/api/media") && size > 2 * 1024 * 1024 + 65536) {
+              res.statusCode = 413;
+              res.setHeader("content-type", "application/json");
+              res.end(JSON.stringify({ message: "Фото должно быть не больше 2 МБ." }));
+              return;
+            }
             chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
           }
           const body = Buffer.concat(chunks);

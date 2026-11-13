@@ -4,11 +4,16 @@ import { immer } from "zustand/middleware/immer";
 import { todayKey } from "@/lib/format";
 import {
   ApexError,
+  BLOCKED_ACCOUNT,
   apex,
   extractToken,
   loadActivitiesBundle,
   loadWorkspace,
+  mapEngagement,
+  mapOrder,
   mapTicket,
+  mapTransaction,
+  listOf,
   passwordChangeRequired,
   readToken,
   shapeOf,
@@ -16,11 +21,20 @@ import {
   ticketStatusToApi,
   writeToken,
   type ActivitiesBundle,
+  type EngagementView,
 } from "@/lib/apex";
 
-export type Role = "employee" | "manager" | "admin" | "chief";
+export type Role = "employee" | "manager" | "hr" | "merchandiser" | "support" | "admin" | "chief";
 export type Category = string;
-export type OrderStatus = "created" | "processing" | "ready" | "issued" | "cancelled";
+export type OrderStatus =
+  | "paid"
+  | "pending"
+  | "processing"
+  | "ready"
+  | "completed"
+  | "issued"
+  | "cancelled"
+  | "created";
 export type TicketStatus = "open" | "in_progress" | "resolved" | "closed";
 export type ActivityKind = "steps" | "streak" | "quiz" | "once";
 export type ActivityCategory = "survey" | "challenge" | "event";
@@ -163,6 +177,8 @@ export interface Ticket {
   id: string;
   userId: string;
   userName?: string;
+  assignedTo?: string;
+  assignedName?: string;
   subject: string;
   status: TicketStatus;
   createdAt: string;
@@ -191,13 +207,19 @@ export interface AppState {
   categories: CategoryRow[];
   roleCatalog: RoleOption[];
   leaderboard: BoardRow[];
+  departmentIds: string[];
   rewardBalance: number | null;
   apiWarnings: string[];
   cart: CartItem[];
   orders: Order[];
+  allOrders: Order[];
   ledger: LedgerEntry[];
+  allLedger: LedgerEntry[];
   activities: Activity[];
   activitiesCatalog: ActivitiesCatalog;
+  engagement: EngagementView | null;
+  engagementStatus: "idle" | "loading" | "ready" | "error";
+  engagementError: string;
   progress: Progress[];
   feed: FeedItem[];
   tickets: Ticket[];
@@ -219,11 +241,14 @@ const seed = (): AppState => ({
   categories: [],
   roleCatalog: [],
   leaderboard: [],
+  departmentIds: [],
   rewardBalance: null,
   apiWarnings: [],
   cart: [],
   orders: [],
+  allOrders: [],
   ledger: [],
+  allLedger: [],
   activities: [],
   activitiesCatalog: {
     status: "idle",
@@ -234,6 +259,9 @@ const seed = (): AppState => ({
     achievements: [],
     warnings: [],
   },
+  engagement: null,
+  engagementStatus: "idle",
+  engagementError: "",
   progress: [],
   feed: [],
   tickets: [],
@@ -265,6 +293,22 @@ export function isAdminRole(role: Role) {
   return role === "admin" || role === "chief";
 }
 
+export function canManageActivities(role: Role) {
+  return isAdminRole(role) || role === "hr";
+}
+
+export function canManageShop(role: Role) {
+  return isAdminRole(role) || role === "merchandiser";
+}
+
+export function canManageSupport(role: Role) {
+  return isAdminRole(role) || role === "support";
+}
+
+export function canOpenAdmin(role: Role) {
+  return canManageActivities(role) || canManageShop(role) || canManageSupport(role) || role === "manager";
+}
+
 export function hasWorkBalance(role: Role) {
   return role === "manager";
 }
@@ -274,12 +318,17 @@ export function awardAmounts(role: Role) {
   return [50, 100, 200, 500];
 }
 
+/** Личная благодарность: получатель получает апексы, у отправителя они не списываются. */
+export const PEER_THANKS_AMOUNT = 25;
+
 interface Actions {
+  uploadAvatar: (userId: string, file: File) => Promise<Result>;
+  uploadImage: (file: File, bucket?: "products" | "icons") => Promise<Result & { url?: string }>;
   boot: () => Promise<void>;
   login: (email: string, password: string) => Promise<Result>;
   logout: () => void;
   refresh: () => Promise<void>;
-  changePassword: (password: string) => Promise<Result>;
+  changePassword: (password: string, current?: string) => Promise<Result>;
   loadTickets: () => Promise<void>;
   createEmployee: (input: {
     email: string;
@@ -291,8 +340,10 @@ interface Actions {
     position: string;
   }) => Promise<Result>;
   loadActivities: () => Promise<void>;
+  loadEngagement: () => Promise<void>;
   joinQuest: (questId: string) => Promise<Result>;
   completeQuestStep: (questId: string, stepId: string, proof?: { storagePath?: string; comment?: string }) => Promise<Result>;
+  updateQuestProof: (questId: string, stepId: string, proof: { storagePath?: string; comment?: string }) => Promise<Result>;
   finishQuest: (questId: string) => Promise<Result>;
   submitSurvey: (surveyId: string, answers: { questionId: string; value: unknown }[]) => Promise<Result>;
   registerForEvent: (eventId: string) => Promise<Result>;
@@ -308,7 +359,11 @@ interface Actions {
   sendRecognition: (input: { toId: string; amount: number; message: string; asManager?: boolean }) => Promise<Result>;
   createTicket: (subject: string, text: string) => Promise<Result>;
   replyTicket: (ticketId: string, text: string) => Promise<Result>;
+  openTicket: (ticketId: string) => Promise<void>;
   setTicketStatus: (ticketId: string, status: TicketStatus) => Promise<Result>;
+  assignTicket: (ticketId: string, userId: string | null) => Promise<Result>;
+  loadAllOrders: () => Promise<void>;
+  loadAllLedger: () => Promise<void>;
   setOrderStatus: (orderId: string, status: string) => Promise<Result>;
   saveProduct: (product: Product) => Promise<Result>;
   adjustBalance: (input: {
@@ -318,6 +373,14 @@ interface Actions {
     balanceType?: "Personal" | "Reward";
   }) => Promise<Result>;
   setUserRole: (userId: string, roleCode: string) => Promise<Result>;
+  updateEmployee: (input: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    middleName: string;
+    department: string;
+    position: string;
+  }) => Promise<Result>;
   setUserStatus: (userId: string, status: Person["status"]) => Promise<Result>;
   saveActivity: (activity: Activity) => void;
   markNoticesRead: () => void;
@@ -333,7 +396,7 @@ function rewardOnce(state: AppState, user: Person, activity: Activity, _reason: 
   pushNotice(
     state,
     user.id,
-    `«${activity.title}» отмечено на этом устройстве. Баллы на сервере не меняются — активности пока не в базе.`,
+    `«${activity.title}» отмечено на этом устройстве. Апексы на сервере не меняются — активности пока не в базе.`,
   );
   return { ok: true };
 }
@@ -360,7 +423,8 @@ async function commit(set: (partial: Partial<AppState>) => void, run: () => Prom
     return { ok: false, error: error instanceof Error ? error.message : "Не получилось" };
   }
   try {
-    set(await loadWorkspace());
+    const workspace = await loadWorkspace();
+    set({ ...workspace, engagementStatus: workspace.engagement ? "ready" : "error" });
   } catch (error) {
     if (error instanceof ApexError && error.status === 401) {
       writeToken(null);
@@ -373,19 +437,28 @@ async function commit(set: (partial: Partial<AppState>) => void, run: () => Prom
 
 async function reloadActivities(
   set: (partial: Partial<AppState>) => void,
-  get: () => { loadActivities: () => Promise<void> },
+  get: () => { loadActivities: () => Promise<void>; loadEngagement: () => Promise<void> },
   run: () => Promise<unknown>,
 ): Promise<Result> {
   const result = await commit(set, async () => {
     await run();
   });
-  if (result.ok) await get().loadActivities();
+  if (result.ok) {
+    await get().loadActivities();
+    await get().loadEngagement();
+  }
   return result;
 }
 
-function thankedThisWeek(feed: FeedItem[], userId: string) {
+function thankedThisWeek(feed: FeedItem[], fromId: string, toId: string) {
   const from = Date.now() - 7 * 24 * 60 * 60 * 1000;
-  return feed.some((item) => item.fromId === userId && item.kind !== "manager" && Date.parse(item.createdAt) >= from);
+  return feed.some(
+    (item) =>
+      item.fromId === fromId &&
+      item.toId === toId &&
+      item.kind !== "manager" &&
+      Date.parse(item.createdAt) >= from,
+  );
 }
 
 function asTicketList(data: unknown): unknown[] {
@@ -412,11 +485,15 @@ export const useStore = create<AppState & Actions>()(
           try {
             const workspace = await loadWorkspace();
             const mustChangePassword = workspace.mustChangePassword || rememberedPasswordChange(workspace.currentUserId);
-            set({ ...workspace, mustChangePassword, session: "ready", sessionError: "" });
+            set({ ...workspace, mustChangePassword, session: "ready", sessionError: "", engagementStatus: workspace.engagement ? "ready" : "error" });
           } catch (error) {
-            if (error instanceof ApexError && error.status === 401) {
+            const blocked = error instanceof ApexError && error.message === BLOCKED_ACCOUNT;
+            if (blocked || (error instanceof ApexError && error.status === 401)) {
               writeToken(null);
-              set({ session: "anon", sessionError: "Сессия закончилась. Войдите снова." });
+              set({
+                session: "anon",
+                sessionError: blocked ? BLOCKED_ACCOUNT : "Сессия закончилась. Войдите снова.",
+              });
               return;
             }
             set({
@@ -451,6 +528,7 @@ export const useStore = create<AppState & Actions>()(
             mustChangePassword,
             session: "ready",
             sessionError: "",
+            engagementStatus: workspace.engagement ? "ready" : "error",
           });
           return { ok: true as const };
         } catch (error) {
@@ -480,11 +558,16 @@ export const useStore = create<AppState & Actions>()(
           apiWarnings: [],
           cart: [],
           orders: [],
+          allOrders: [],
           ledger: [],
+          allLedger: [],
           feed: [],
           tickets: [],
           ticketsError: "",
           mustChangePassword: false,
+          engagement: null,
+          engagementStatus: "idle",
+          engagementError: "",
           activitiesCatalog: {
             status: "idle",
             error: "",
@@ -500,11 +583,20 @@ export const useStore = create<AppState & Actions>()(
         const workspace = await loadWorkspace();
         const mustChangePassword =
           get().mustChangePassword || workspace.mustChangePassword || rememberedPasswordChange(workspace.currentUserId);
-        set({ ...workspace, mustChangePassword, session: "ready", sessionError: "" });
+        set({
+          ...workspace,
+          mustChangePassword,
+          session: "ready",
+          sessionError: "",
+          engagementStatus: workspace.engagement ? "ready" : "error",
+        });
       },
-      changePassword: async (password) => {
+      changePassword: async (password, current) => {
         const next = password.trim();
-        if (next.length < 6) return { ok: false as const, error: "Пароль короче 6 символов" };
+        if (next.length < 6) return { ok: false as const, error: "Пароль должен быть не короче 6 символов" };
+        if (current != null && next === current.trim()) {
+          return { ok: false as const, error: "Новый пароль совпадает с текущим" };
+        }
         try {
           await apex("/api/Auth/change-password", {
             method: "POST",
@@ -519,13 +611,24 @@ export const useStore = create<AppState & Actions>()(
       },
       loadTickets: async () => {
         const role = get().people.find((item) => item.id === get().currentUserId)?.role;
-        const path = role === "admin" || role === "chief" ? "/api/support/tickets/all?page=1&pageSize=50" : "/api/support/tickets?page=1&pageSize=50";
+        const path =
+          role === "admin" || role === "chief" || role === "support"
+            ? "/api/support/tickets/all?page=1&pageSize=50"
+            : "/api/support/tickets?page=1&pageSize=50";
         try {
           const data = await apex(path);
           const tickets = (Array.isArray(data) ? data : asTicketList(data))
             .map(mapTicket)
             .filter((item): item is NonNullable<typeof item> => Boolean(item));
-          set({ tickets, ticketsError: "" });
+          set((state) => {
+            const previous = new Map(state.tickets.map((item) => [item.id, item]));
+            state.tickets = tickets.map((ticket) => {
+              if (ticket.messages.length > 0) return ticket;
+              const saved = previous.get(ticket.id);
+              return saved && saved.messages.length > 0 ? { ...ticket, messages: saved.messages } : ticket;
+            });
+            state.ticketsError = "";
+          });
         } catch (error) {
           set({
             ticketsError: error instanceof Error ? error.message : "Не удалось загрузить обращения",
@@ -582,6 +685,28 @@ export const useStore = create<AppState & Actions>()(
           });
         }
       },
+      loadEngagement: async () => {
+        if (!get().currentUserId) return;
+        if (get().engagementStatus === "idle") set({ engagementStatus: "loading", engagementError: "" });
+        try {
+          const view = mapEngagement(await apex("/api/me/engagement"));
+          if (!view) {
+            set({ engagementStatus: "error", engagementError: "Сервер не прислал уровень активности" });
+            return;
+          }
+          set({ engagement: view, engagementStatus: "ready", engagementError: "" });
+        } catch (error) {
+          if (error instanceof ApexError && error.status === 401) {
+            writeToken(null);
+            set({ session: "anon", sessionError: "Сессия закончилась. Войдите снова." });
+            return;
+          }
+          set({
+            engagementStatus: "error",
+            engagementError: error instanceof Error ? error.message : "Не удалось загрузить уровень",
+          });
+        }
+      },
       joinQuest: (questId) =>
         reloadActivities(set, get, () => apex(`/api/quests/${questId}/join`, { method: "POST" })),
       completeQuestStep: (questId, stepId, proof) =>
@@ -591,6 +716,16 @@ export const useStore = create<AppState & Actions>()(
             body: JSON.stringify({
               storagePath: proof?.storagePath?.trim() || null,
               comment: proof?.comment?.trim() || null,
+            }),
+          }),
+        ),
+      updateQuestProof: (questId, stepId, proof) =>
+        reloadActivities(set, get, () =>
+          apex(`/api/quests/${questId}/steps/${stepId}/proof`, {
+            method: "PUT",
+            body: JSON.stringify({
+              storagePath: proof.storagePath?.trim() || null,
+              comment: proof.comment?.trim() || null,
             }),
           }),
         ),
@@ -665,7 +800,7 @@ export const useStore = create<AppState & Actions>()(
             state.progress.push(row);
           }
           if (row.rewarded) {
-            result = { ok: false, error: "Баллы за шаги сегодня уже начислены" };
+            result = { ok: false, error: "Апексы за шаги сегодня уже начислены" };
             return;
           }
           row.value = activity.target;
@@ -771,21 +906,23 @@ export const useStore = create<AppState & Actions>()(
         if (!sender || !recipient) return { ok: false as const, error: "Сотрудник не найден" };
         if (sender.id === recipient.id) return { ok: false as const, error: "Нельзя поблагодарить самого себя" };
         if (recipient.status !== "active") return { ok: false as const, error: "Этому сотруднику сейчас нельзя отправить" };
-        const points = asManager ? amount : 1;
+        const points = asManager ? amount : PEER_THANKS_AMOUNT;
         if (asManager && (!Number.isInteger(points) || points <= 0)) return { ok: false as const, error: "Укажите сумму" };
         if (!asManager && textMessage.length < 2) return { ok: false as const, error: "Напишите пару слов" };
-        if (!asManager && thankedThisWeek(state.feed, sender.id)) {
-          return { ok: false as const, error: "Благодарность можно отправить один раз в неделю" };
+        if (!asManager && thankedThisWeek(state.feed, sender.id, recipient.id)) {
+          return { ok: false as const, error: "Этому коллеге благодарность уже отправлена на этой неделе" };
         }
         const body: Record<string, unknown> = { toUserId: toId, amount: points };
         if (textMessage) body.message = textMessage;
         if (!asManager) body.isPublic = true;
-        return commit(set, async () => {
+        const result = await commit(set, async () => {
           await apex(asManager ? "/api/thanks/manager-bonus" : "/api/thanks", {
             method: "POST",
             body: JSON.stringify(body),
           });
         });
+        if (result.ok) await get().loadEngagement();
+        return result;
       },
       createTicket: async (subject, text) => {
         const title = subject.trim();
@@ -813,6 +950,10 @@ export const useStore = create<AppState & Actions>()(
       replyTicket: async (ticketId, text) => {
         const body = text.trim();
         if (body.length < 2) return { ok: false, error: "Введите сообщение" };
+        const current = get().tickets.find((item) => item.id === ticketId);
+        if (current?.status === "closed" || current?.status === "resolved") {
+          return { ok: false, error: "Обращение уже закрыто" };
+        }
         try {
           await apex(`/api/support/tickets/${ticketId}/messages`, {
             method: "POST",
@@ -832,6 +973,20 @@ export const useStore = create<AppState & Actions>()(
           return { ok: false as const, error: error instanceof Error ? error.message : "Не удалось отправить" };
         }
       },
+      openTicket: async (ticketId) => {
+        try {
+          const data = await apex(`/api/support/tickets/${ticketId}`);
+          const ticket = mapTicket(data);
+          if (!ticket) return;
+          set((state) => {
+            const index = state.tickets.findIndex((item) => item.id === ticket.id);
+            if (index >= 0) state.tickets[index] = ticket;
+            else state.tickets.unshift(ticket);
+          });
+        } catch {
+          // Список остаётся, даже если карточка обращения не открылась.
+        }
+      },
       setTicketStatus: async (ticketId, status) => {
         try {
           await apex(`/api/support/tickets/${ticketId}/status`, {
@@ -847,13 +1002,71 @@ export const useStore = create<AppState & Actions>()(
           return { ok: false as const, error: error instanceof Error ? error.message : "Не удалось сменить статус" };
         }
       },
-      setOrderStatus: async (orderId, status) =>
-        commit(set, async () => {
-          await apex(`/api/orders/${orderId}/status`, {
+      assignTicket: async (ticketId, userId) => {
+        const current = get().tickets.find((item) => item.id === ticketId);
+        const me = get().currentUserId;
+        if (userId) {
+          if (current?.assignedTo) return { ok: false, error: "Обращение уже назначено" };
+        } else if (current?.assignedTo && current.assignedTo !== me) {
+          return { ok: false, error: "Снять назначение может только тот, кто его взял" };
+        }
+        try {
+          await apex(`/api/support/tickets/${ticketId}/assigned-to`, {
             method: "PATCH",
-            body: JSON.stringify({ status: statusToApi(status) }),
+            body: JSON.stringify({ userId }),
           });
-        }),
+          const data = await apex(`/api/support/tickets/${ticketId}`);
+          const ticket = mapTicket(data);
+          if (ticket) {
+            set((state) => {
+              const index = state.tickets.findIndex((item) => item.id === ticket.id);
+              if (index >= 0) state.tickets[index] = ticket;
+            });
+          }
+          return { ok: true as const };
+        } catch (error) {
+          return { ok: false as const, error: error instanceof Error ? error.message : "Не удалось назначить обращение" };
+        }
+      },
+      loadAllOrders: async () => {
+        const data = await apex("/api/orders/all");
+        const orders = listOf(data)
+          .map((item) => mapOrder(item, ""))
+          .filter((item): item is Order => Boolean(item));
+        set({ allOrders: orders });
+      },
+      loadAllLedger: async () => {
+        const data = await apex("/api/balances/transactions/all?skip=0&take=200");
+        const ledger = listOf(data)
+          .map((item) => mapTransaction(item, ""))
+          .filter((item): item is LedgerEntry => Boolean(item));
+        set({ allLedger: ledger });
+      },
+      setOrderStatus: async (orderId, status) => {
+        try {
+          if (status === "cancelled") {
+            await apex(`/api/orders/${orderId}/cancel`, { method: "PATCH" });
+            const data = await apex("/api/balances/me/transactions?skip=0&take=50");
+            const ledger = listOf(data)
+              .map((item) => mapTransaction(item, get().currentUserId))
+              .filter((item): item is LedgerEntry => Boolean(item));
+            set({ ledger });
+          } else {
+            await apex(`/api/orders/${orderId}/status`, {
+              method: "PATCH",
+              body: JSON.stringify({ status: statusToApi(status) }),
+            });
+          }
+          set((state) => {
+            for (const order of [...state.orders, ...state.allOrders]) {
+              if (order.id === orderId) order.status = status;
+            }
+          });
+          return { ok: true as const };
+        } catch (error) {
+          return { ok: false as const, error: error instanceof Error ? error.message : "Не удалось сменить статус заказа" };
+        }
+      },
       saveProduct: async (product) => {
         if (!product.title.trim()) return { ok: false as const, error: "Укажите название" };
         if (product.price < 0 || !Number.isInteger(product.price)) {
@@ -900,12 +1113,70 @@ export const useStore = create<AppState & Actions>()(
           });
         });
       },
+      uploadAvatar: async (userId, file) => {
+        const actorId = get().currentUserId;
+        try {
+          const body = new FormData();
+          body.set("file", file);
+          const result = (await apex(`/api/users/${userId === actorId ? "me" : userId}/avatar`, {
+            method: "POST",
+            body,
+          })) as { avatarUrl?: string };
+          if (!result.avatarUrl) return { ok: false as const, error: "Сервер не вернул ссылку на фото" };
+          if (get().currentUserId === actorId) {
+            set((state) => {
+              const target = state.people.find((person) => person.id === userId);
+              if (target) target.avatarUrl = result.avatarUrl;
+            });
+          }
+          return { ok: true as const };
+        } catch (error) {
+          return { ok: false as const, error: error instanceof Error ? error.message : "Не удалось загрузить фото" };
+        }
+      },
+      uploadImage: async (file, bucket = "products") => {
+        try {
+          const body = new FormData();
+          body.set("file", file);
+          body.set("bucket", bucket);
+          const result = (await apex("/api/media", { method: "POST", body })) as { url?: string };
+          if (!result.url) return { ok: false as const, error: "Сервер не вернул ссылку на фото" };
+          return { ok: true as const, url: result.url };
+        } catch (error) {
+          return { ok: false as const, error: error instanceof Error ? error.message : "Не удалось загрузить фото" };
+        }
+      },
       setUserRole: async (userId, roleCode) => {
         if (!roleCode) return { ok: false as const, error: "Выберите роль" };
         return commit(set, async () => {
           await apex(`/api/users/${userId}/roles`, {
             method: "PUT",
             body: JSON.stringify({ roleCodes: [roleCode] }),
+          });
+        });
+      },
+      updateEmployee: async (input) => {
+        const firstName = input.firstName.trim();
+        const lastName = input.lastName.trim();
+        const department = input.department.trim();
+        const position = input.position.trim();
+        if (!firstName || !lastName || !department || !position) {
+          return { ok: false as const, error: "Заполните имя, фамилию, отдел и должность" };
+        }
+        const target = get().people.find((item) => item.id === input.id);
+        if (!target) return { ok: false as const, error: "Сотрудник не найден" };
+        return commit(set, async () => {
+          await apex(`/api/users/${input.id}`, {
+            method: "PATCH",
+            body: JSON.stringify({
+              firstName,
+              lastName,
+              middleName: input.middleName.trim(),
+              avatarUrl: target.avatarUrl ?? "",
+              department,
+              position,
+              isActive: target.status === "active",
+            }),
           });
         });
       },

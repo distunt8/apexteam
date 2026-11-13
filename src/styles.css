@@ -27,6 +27,7 @@
     font-family: var(--font-sans);
     background: var(--color-surface);
     color: var(--color-ink);
+    color-scheme: light;
   }
   body {
     margin: 0;
@@ -46,6 +47,56 @@
     background: var(--color-brand-soft);
     color: var(--color-brand-deep);
   }
+}
+
+/* System dark, unless the user picked light. Explicit dark uses html.dark. */
+@media (prefers-color-scheme: dark) {
+  html:not(.light) {
+    color-scheme: dark;
+    --color-paper: #0e141b;
+    --color-card: #182230;
+    --color-surface: #101820;
+    --color-sidebar: #0c1218;
+    --color-ink: #e8eef6;
+    --color-muted: #9aabbb;
+    --color-line: #2a3848;
+    --color-brand: #5b96e4;
+    --color-brand-strong: #4a84d4;
+    --color-brand-deep: #d5e6fa;
+    --color-brand-mid: #8eb4e8;
+    --color-brand-soft: #243955;
+    --color-brand-wash: #1b2d44;
+    --color-danger: #ff8b98;
+  }
+  html:not(.light) .apex-wordmark {
+    filter: invert(1) hue-rotate(180deg);
+  }
+}
+
+html.dark {
+  color-scheme: dark;
+  --color-paper: #0e141b;
+  --color-card: #182230;
+  --color-surface: #101820;
+  --color-sidebar: #0c1218;
+  --color-ink: #e8eef6;
+  --color-muted: #9aabbb;
+  --color-line: #2a3848;
+  --color-brand: #5b96e4;
+  --color-brand-strong: #4a84d4;
+  --color-brand-deep: #d5e6fa;
+  --color-brand-mid: #8eb4e8;
+  --color-brand-soft: #243955;
+  --color-brand-wash: #1b2d44;
+  --color-danger: #ff8b98;
+}
+
+html.dark .apex-wordmark {
+  filter: invert(1) hue-rotate(180deg);
+}
+
+html.light {
+  color-scheme: light;
 }
 
 @utility tabular {

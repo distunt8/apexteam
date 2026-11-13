@@ -1,9 +1,14 @@
+import { uploadAvatar, uploadMedia } from "../src/lib/avatar-upload.server.mjs";
+
 const ORIGIN = "https://apexapp-backend.onrender.com";
 
 /** @param {Request} request */
 export async function proxyApex(request) {
   const url = new URL(request.url);
   const suffix = url.pathname.replace(/^\/api\/apex/, "") + url.search;
+  const avatar = url.pathname.match(/^\/api\/apex\/api\/users\/(me|[0-9a-f-]{36})\/avatar$/i);
+  if (avatar) return uploadAvatar(request, avatar[1]);
+  if (url.pathname === "/api/apex/api/media") return uploadMedia(request);
   const headers = new Headers();
   const auth = request.headers.get("authorization");
   const type = request.headers.get("content-type");

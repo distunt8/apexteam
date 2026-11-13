@@ -13,8 +13,8 @@ export function Button({
     <button
       type={type}
       className={cn(
-        "inline-flex min-h-11 items-center justify-center gap-2 rounded-md px-4 text-sm font-semibold transition-colors duration-150 disabled:opacity-45",
-        variant === "primary" && "bg-brand text-white hover:bg-brand-strong active:bg-brand-deep",
+        "inline-flex min-h-11 items-center justify-center gap-2 rounded-md px-4 text-sm font-semibold transition-colors duration-150 disabled:pointer-events-none disabled:opacity-45",
+        variant === "primary" && "bg-brand text-white hover:bg-brand-strong",
         variant === "ghost" && "bg-transparent text-ink hover:bg-brand-wash",
         variant === "soft" && "bg-brand-wash text-brand-deep hover:bg-brand-soft",
         variant === "line" && "border border-line bg-surface text-ink hover:border-brand-mid",

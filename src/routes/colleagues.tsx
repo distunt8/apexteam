@@ -1,11 +1,12 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { Search } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
+import { Pager, usePage } from "@/components/pager";
 import { Shell } from "@/components/shell";
 import { Button, TextArea, TextInput } from "@/components/ui";
-import { formatNumber, initials } from "@/lib/format";
-import { awardAmounts, hasWorkBalance, useStore } from "@/lib/store";
+import { formatNumber, initials, pointsLabel } from "@/lib/format";
+import { awardAmounts, hasWorkBalance, PEER_THANKS_AMOUNT, useStore } from "@/lib/store";
 
 export const Route = createFileRoute("/colleagues")({ component: ColleaguesPage });
 
@@ -30,13 +31,21 @@ function ColleaguesPage() {
       return `${person.name} ${person.position} ${person.department}`.toLowerCase().includes(needle);
     });
   }, [people, query]);
+  const page = usePage(list, 8, query);
 
   if (!user) return null;
   const amounts = awardAmounts(user.role);
   const target = people.find((person) => person.id === selected);
   const canReward = hasWorkBalance(user.role);
-  const thanked = feed.some(
-    (item) => item.fromId === user.id && item.kind !== "manager" && Date.parse(item.createdAt) >= Date.now() - 7 * 24 * 60 * 60 * 1000,
+  const thanked = Boolean(
+    target &&
+      feed.some(
+        (item) =>
+          item.fromId === user.id &&
+          item.toId === target.id &&
+          item.kind !== "manager" &&
+          Date.parse(item.createdAt) >= Date.now() - 7 * 24 * 60 * 60 * 1000,
+      ),
   );
 
   function submit() {
@@ -64,7 +73,7 @@ function ColleaguesPage() {
     <Shell mode="top">
       <h1 className="text-3xl font-bold tracking-tight">Коллеги</h1>
       <p className="mt-2 text-sm text-muted">
-        Благодарность не списывает баллы. Отправить можно один раз в неделю.
+        Благодарность не списывает ваши апексы: коллега получает {PEER_THANKS_AMOUNT} {pointsLabel(PEER_THANKS_AMOUNT)}. Одному человеку — только раз в неделю.
         {canReward ? " Поощрение руководителя списывается с рабочего баланса." : ""}
       </p>
       <p className="mt-2 text-sm">
@@ -88,32 +97,35 @@ function ColleaguesPage() {
           </div>
           <p className="mt-4 text-xs font-semibold tracking-wide text-muted">КОЛЛЕГИ</p>
           <ul className="mt-2 space-y-2">
-            {list.map((person) => {
+            {page.items.map((person) => {
               const self = person.id === user.id;
               const on = person.id === selected;
               return (
-                <li key={person.id}>
-                  <button
-                    type="button"
-                    disabled={self}
-                    onClick={() => setSelected(person.id)}
-                    className={`flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left ${
-                      on ? "bg-brand-wash" : "bg-card"
-                    } disabled:opacity-50`}
-                  >
+                <li key={person.id} className={`rounded-lg px-3 py-3 ${on ? "bg-brand-wash" : "bg-card"}`}>
+                  <div className="flex items-center gap-3">
                     <span className="grid size-11 shrink-0 place-items-center rounded-full bg-brand text-sm font-bold text-white">
                       {initials(person.name)}
                     </span>
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate font-semibold">{person.name}</span>
+                      <Link to="/people/$userId" params={{ userId: person.id }} className="block truncate font-semibold hover:text-brand">
+                        {person.name}
+                      </Link>
                       <span className="block truncate text-xs text-muted">{person.position}</span>
                     </span>
-                    <span className="text-sm font-medium text-brand">{self ? "Это вы" : "Спасибо"}</span>
-                  </button>
+                    <button
+                      type="button"
+                      disabled={self}
+                      onClick={() => setSelected(person.id)}
+                      className="text-sm font-medium text-brand disabled:opacity-50"
+                    >
+                      {self ? "Это вы" : on ? "Выбран" : "Спасибо"}
+                    </button>
+                  </div>
                 </li>
               );
             })}
           </ul>
+          <Pager page={page.page} pages={page.pages} total={page.total} onPage={page.setPage} />
         </div>
 
         <form
@@ -150,7 +162,7 @@ function ColleaguesPage() {
             </div>
           ) : (
             <p className="mt-3 text-sm text-muted">
-              {thanked ? "На этой неделе благодарность уже отправлена." : "Баллы при этом не списываются."}
+              {thanked ? "Этому коллеге на этой неделе уже отправлена благодарность." : `Коллега получит ${PEER_THANKS_AMOUNT} ${pointsLabel(PEER_THANKS_AMOUNT)}.`}
             </p>
           )}
           <label className="mt-4 block text-sm font-medium">

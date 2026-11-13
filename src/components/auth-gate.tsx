@@ -89,6 +89,7 @@ function Login({ error }: { error: string }) {
 function ForcePassword() {
   const changePassword = useStore((state) => state.changePassword);
   const logout = useStore((state) => state.logout);
+  const [current, setCurrent] = useState("");
   const [password, setPassword] = useState("");
   const [again, setAgain] = useState("");
   const [error, setError] = useState("");
@@ -103,20 +104,31 @@ function ForcePassword() {
         className="mt-6 space-y-3"
         onSubmit={(event) => {
           event.preventDefault();
+          if (password.length < 6) {
+            setError("Пароль должен быть не короче 6 символов");
+            return;
+          }
+          if (password === current) {
+            setError("Новый пароль совпадает с текущим");
+            return;
+          }
           if (password !== again) {
             setError("Пароли не совпадают");
             return;
           }
           setPending(true);
           setError("");
-          void changePassword(password).then((result) => {
+          void changePassword(password, current).then((result) => {
             setPending(false);
             if (!result.ok) setError(result.error);
           });
         }}
       >
+        <Field label="Текущий пароль">
+          <TextInput type="password" autoComplete="current-password" value={current} onChange={(event) => setCurrent(event.target.value)} required />
+        </Field>
         <Field label="Новый пароль">
-          <TextInput type="password" autoComplete="new-password" value={password} onChange={(event) => setPassword(event.target.value)} required />
+          <TextInput type="password" autoComplete="new-password" minLength={6} value={password} onChange={(event) => setPassword(event.target.value)} required />
         </Field>
         <Field label="Ещё раз">
           <TextInput type="password" autoComplete="new-password" value={again} onChange={(event) => setAgain(event.target.value)} required />

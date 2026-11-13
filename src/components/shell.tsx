@@ -1,3 +1,4 @@
+import { UserAvatar } from "@/components/user-avatar";
 import { Link, useRouterState } from "@tanstack/react-router";
 import {
   ChevronDown,
@@ -7,41 +8,66 @@ import {
   LayoutDashboard,
   LifeBuoy,
   LogOut,
+  Menu,
   ShoppingBag,
   UserRound,
   Users,
+  X,
   Zap,
 } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { Wordmark } from "@/components/logo";
 import { cn } from "@/lib/cn";
-import { formatNumber } from "@/lib/format";
+import { formatNumber, pointsLabel } from "@/lib/format";
 import { ROLE_LABEL } from "@/lib/labels";
-import { hasWorkBalance, isAdminRole, useStore, type Role } from "@/lib/store";
+import { canOpenAdmin, hasWorkBalance, useStore, type Role } from "@/lib/store";
 
-const TOP = [
+type NavTo =
+  | "/"
+  | "/activities"
+  | "/my-activity"
+  | "/colleagues"
+  | "/catalog"
+  | "/cart"
+  | "/orders"
+  | "/history"
+  | "/support"
+  | "/profile"
+  | "/admin";
+
+type NavLink = { to: NavTo; label: string };
+type NavGroup = { id: string; label: string; icon: typeof Home; items: NavLink[] };
+
+const NAV: Array<NavLink & { icon: typeof Home } | NavGroup> = [
   { to: "/", label: "Главная", icon: Home },
-  { to: "/activities", label: "Активности", icon: Zap },
+  {
+    id: "activities",
+    label: "Активности",
+    icon: Zap,
+    items: [
+      { to: "/activities", label: "Все активности" },
+      { to: "/my-activity", label: "Моя активность" },
+    ],
+  },
   { to: "/colleagues", label: "Коллеги", icon: Users },
-  { to: "/catalog", label: "Магазин", icon: ShoppingBag },
+  {
+    id: "shop",
+    label: "Магазин",
+    icon: ShoppingBag,
+    items: [
+      { to: "/catalog", label: "Каталог" },
+      { to: "/cart", label: "Корзина" },
+      { to: "/orders", label: "Мои заказы" },
+    ],
+  },
+  { to: "/history", label: "История", icon: History },
   { to: "/support", label: "Поддержка", icon: LifeBuoy },
-] as const;
-
-const SIDE = [
-  { to: "/catalog", label: "Каталог" },
-  { to: "/cart", label: "Корзина" },
-  { to: "/orders", label: "Мои заказы" },
-  { to: "/history", label: "История" },
-  { to: "/profile", label: "Профиль" },
-  { to: "/support", label: "Поддержка" },
-] as const;
-
-const BOTTOM = [
-  { to: "/", label: "Главная", icon: Home },
-  { to: "/activities", label: "Активности", icon: Zap },
-  { to: "/catalog", label: "Магазин", icon: ShoppingBag },
   { to: "/profile", label: "Профиль", icon: UserRound },
-] as const;
+];
+
+function isGroup(item: (typeof NAV)[number]): item is NavGroup {
+  return "items" in item;
+}
 
 function activePath(path: string, to: string) {
   if (to === "/") return path === "/";
@@ -49,146 +75,161 @@ function activePath(path: string, to: string) {
 }
 
 export function Shell({
-  mode,
   children,
 }: {
-  mode: "top" | "shop";
+  mode?: "top" | "shop";
   children: ReactNode;
 }) {
   const path = useRouterState({ select: (state) => state.location.pathname });
   const user = useStore((state) => state.people.find((person) => person.id === state.currentUserId));
   const cartCount = useStore((state) => state.cart.reduce((sum, item) => sum + item.qty, 0));
+  const [open, setOpen] = useState(false);
+  const [opened, setOpened] = useState<string | null>(null);
 
   if (!user) return null;
 
+  const groupOpen = (group: NavGroup) =>
+    opened === group.id || group.items.some((item) => activePath(path, item.to));
+
   return (
     <div className="min-h-screen bg-surface text-ink">
-      {mode === "top" ? (
-        <header className="sticky top-0 z-20 border-b border-line bg-surface/95 backdrop-blur">
-          <div className="mx-auto flex h-16 max-w-[1200px] items-center gap-4 px-4 sm:px-6">
-            <Link to="/" className="shrink-0" aria-label="На главную">
-              <Wordmark />
-            </Link>
-            <nav className="hidden items-center gap-1 lg:flex">
-              {TOP.map((item) => (
-                <Link
-                  key={item.to}
-                  to={item.to}
-                  className={cn(
-                    "rounded-md px-3 py-2 text-sm",
-                    activePath(path, item.to) ? "font-semibold text-brand" : "text-ink hover:bg-card",
-                  )}
-                >
-                  {item.label}
-                </Link>
-              ))}
-            </nav>
-            <div className="ml-auto flex items-center gap-1 sm:gap-2">
-              <BalanceMenu />
-              <UserMenu />
-            </div>
-          </div>
-        </header>
-      ) : (
-        <header className="sticky top-0 z-20 flex h-14 items-center justify-between border-b border-line bg-surface px-4 lg:hidden">
-          <Link to="/" aria-label="На главную">
-            <Wordmark className="h-8" />
-          </Link>
-          <div className="flex items-center gap-1">
-            <Link to="/cart" className="relative grid size-11 place-items-center" aria-label="Корзина">
-              <ShoppingBag className="size-5" />
-              {cartCount > 0 ? (
-                <span className="absolute top-1 right-1 grid min-w-5 place-items-center rounded-full bg-brand px-1 text-[10px] font-bold text-white">
-                  {cartCount}
-                </span>
-              ) : null}
-            </Link>
-            <BalanceMenu compact />
-            <UserMenu compact />
-          </div>
-        </header>
-      )}
+      <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-line bg-surface px-3 lg:hidden">
+        <button type="button" className="grid size-11 place-items-center" aria-label="Меню" onClick={() => setOpen(true)}>
+          <Menu className="size-5" />
+        </button>
+        <Link to="/" aria-label="На главную">
+          <Wordmark className="h-8" />
+        </Link>
+        <UserMenu compact />
+      </header>
 
-      <div className={cn(mode === "shop" && "lg:grid lg:grid-cols-[220px_minmax(0,1fr)]")}>
-        {mode === "shop" ? (
-          <aside className="hidden min-h-screen flex-col border-r border-line bg-sidebar px-4 py-6 lg:flex">
-            <Link to="/" aria-label="На главную">
-              <Wordmark />
-            </Link>
-            <nav className="mt-8 flex flex-col gap-1">
-              {SIDE.map((item) => (
+      {open ? <button type="button" className="fixed inset-0 z-40 bg-black/40 lg:hidden" aria-label="Закрыть меню" onClick={() => setOpen(false)} /> : null}
+
+      <aside
+        className={cn(
+          "fixed inset-y-0 left-0 z-50 flex w-[260px] flex-col border-r border-line bg-sidebar px-3 py-5 transition-transform lg:translate-x-0",
+          open ? "translate-x-0" : "-translate-x-full",
+        )}
+      >
+        <div className="flex items-center justify-between px-2">
+          <Link to="/" aria-label="На главную" onClick={() => setOpen(false)}>
+            <Wordmark />
+          </Link>
+          <button type="button" className="grid size-10 place-items-center lg:hidden" aria-label="Закрыть" onClick={() => setOpen(false)}>
+            <X className="size-5" />
+          </button>
+        </div>
+        <nav className="mt-6 flex flex-1 flex-col gap-1 overflow-y-auto">
+          {NAV.map((item) => {
+            if (!isGroup(item)) {
+              const Icon = item.icon;
+              return (
                 <Link
                   key={item.to}
                   to={item.to}
-                  className={cn(
-                    "flex min-h-11 items-center rounded-md px-3 text-[15px]",
-                    activePath(path, item.to) ? "font-bold text-brand" : "text-ink hover:bg-surface",
-                  )}
-                >
-                  {item.label}
-                  {item.to === "/cart" && cartCount > 0 ? (
-                    <span className="ml-auto text-xs font-semibold text-brand">{cartCount}</span>
-                  ) : null}
-                </Link>
-              ))}
-              {isAdminRole(user.role) ? (
-                <Link
-                  to="/admin"
+                  onClick={() => setOpen(false)}
                   className={cn(
                     "flex min-h-11 items-center gap-2 rounded-md px-3 text-[15px]",
-                    activePath(path, "/admin") ? "font-bold text-brand" : "text-ink hover:bg-surface",
+                    activePath(path, item.to) ? "bg-brand-wash font-bold text-brand" : "text-ink hover:bg-surface",
                   )}
                 >
-                  <LayoutDashboard className="size-4" />
-                  Администрирование
-                </Link>
-              ) : null}
-            </nav>
-            <div className="mt-auto space-y-3 pt-10">
-              <div>
-                <p className="text-sm text-muted">Личный баланс</p>
-                <p className="mt-1 flex items-center gap-2 text-2xl font-bold text-brand">
-                  <Gem className="size-5" />
-                  <span className="tabular">{formatNumber(user.balance)}</span>
-                </p>
-              </div>
-              {hasWorkBalance(user.role) ? (
-                <div>
-                  <p className="text-sm text-muted">Рабочий · поощрения</p>
-                  <p className="mt-1 text-lg font-bold tabular">
-                    <RewardAmount />
-                  </p>
-                </div>
-              ) : null}
-            </div>
-          </aside>
-        ) : null}
-        <main className="mx-auto w-full min-w-0 max-w-[1200px] px-4 pt-5 pb-28 sm:px-6 lg:pb-10">{children}</main>
-      </div>
-
-      <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-surface pb-[env(safe-area-inset-bottom)] lg:hidden">
-        <ul className="grid h-16 grid-cols-4">
-          {BOTTOM.map((item) => {
-            const Icon = item.icon;
-            const on = activePath(path, item.to);
-            return (
-              <li key={item.to}>
-                <Link
-                  to={item.to}
-                  className={cn(
-                    "flex h-full flex-col items-center justify-center gap-1 text-[11px]",
-                    on ? "font-semibold text-brand" : "text-muted",
-                  )}
-                >
-                  <Icon className="size-5" />
+                  <Icon className="size-4 shrink-0" />
                   {item.label}
                 </Link>
-              </li>
+              );
+            }
+            const Icon = item.icon;
+            const expanded = groupOpen(item);
+            return (
+              <div key={item.id}>
+                <button
+                  type="button"
+                  className="flex min-h-11 w-full items-center gap-2 rounded-md px-3 text-left text-[15px] hover:bg-surface"
+                  aria-expanded={expanded}
+                  onClick={() => setOpened(expanded ? "" : item.id)}
+                >
+                  <Icon className="size-4 shrink-0" />
+                  <span className="flex-1">{item.label}</span>
+                  <ChevronDown className={cn("size-4 text-muted transition-transform", expanded && "rotate-180")} />
+                </button>
+                {expanded ? (
+                  <div className="mb-1 ml-4 flex flex-col gap-0.5 border-l border-line pl-2">
+                    {item.items.map((child) => (
+                      <Link
+                        key={child.to}
+                        to={child.to}
+                        onClick={() => setOpen(false)}
+                        className={cn(
+                          "flex min-h-10 items-center rounded-md px-3 text-sm",
+                          activePath(path, child.to) ? "font-bold text-brand" : "text-ink hover:bg-surface",
+                        )}
+                      >
+                        {child.label}
+                        {child.to === "/cart" && cartCount > 0 ? (
+                          <span className="ml-auto text-xs font-semibold text-brand">{cartCount}</span>
+                        ) : null}
+                      </Link>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
             );
           })}
-        </ul>
-      </nav>
+          {canOpenAdmin(user.role) ? (
+            <Link
+              to="/admin"
+              onClick={() => setOpen(false)}
+              className={cn(
+                "flex min-h-11 items-center gap-2 rounded-md px-3 text-[15px]",
+                activePath(path, "/admin") ? "bg-brand-wash font-bold text-brand" : "text-ink hover:bg-surface",
+              )}
+            >
+              <LayoutDashboard className="size-4 shrink-0" />
+              Администрирование
+            </Link>
+          ) : null}
+        </nav>
+        <div className="space-y-3 border-t border-line px-2 pt-4">
+          <div>
+            <p className="text-xs text-muted">Личный баланс</p>
+            <p className="mt-1 flex items-center gap-2 text-xl font-bold text-brand">
+              <Gem className="size-4" />
+              <span className="tabular">{formatNumber(user.balance)}</span>
+              <span className="text-sm font-medium text-muted">{pointsLabel(user.balance)}</span>
+            </p>
+          </div>
+          {hasWorkBalance(user.role) ? (
+            <div>
+              <p className="text-xs text-muted">Рабочий · поощрения</p>
+              <p className="mt-1 text-lg font-bold tabular">
+                <RewardAmount />
+              </p>
+            </div>
+          ) : null}
+          <div className="hidden items-center gap-2 lg:flex">
+            <UserAvatar user={user} className="size-8 text-xs" />
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-medium">{user.name}</p>
+              <p className="truncate text-xs text-muted">{user.roleTitle || ROLE_LABEL[user.role]}</p>
+            </div>
+            <Logout />
+          </div>
+        </div>
+      </aside>
+
+      <main className="lg:pl-[260px]">
+        <div className="mx-auto w-full min-w-0 max-w-[1100px] px-4 pt-5 pb-10 sm:px-6">{children}</div>
+      </main>
     </div>
+  );
+}
+
+function Logout() {
+  const logout = useStore((state) => state.logout);
+  return (
+    <button type="button" className="grid size-10 place-items-center rounded-md hover:bg-surface" aria-label="Выйти" onClick={() => logout()}>
+      <LogOut className="size-4" />
+    </button>
   );
 }
 
@@ -198,96 +239,27 @@ function RewardAmount() {
   return <>{formatNumber(reward)}</>;
 }
 
-function BalanceMenu({ compact = false }: { compact?: boolean }) {
-  const [open, setOpen] = useState(false);
-  const user = useStore((state) => state.people.find((person) => person.id === state.currentUserId));
-  const reward = useStore((state) => state.rewardBalance);
-  if (!user) return null;
-  const showWork = hasWorkBalance(user.role);
-  if (!showWork) {
-    return (
-      <div className="flex min-h-11 items-center gap-1.5 px-2 text-sm">
-        <Gem className="size-4 text-brand" />
-        <span className="tabular font-semibold">{formatNumber(user.balance)}</span>
-        {compact ? null : <span className="hidden text-muted sm:inline">баллов</span>}
-      </div>
-    );
-  }
-  return (
-    <div className="relative">
-      <button
-        type="button"
-        className="flex min-h-11 items-center gap-1.5 rounded-md px-2 text-sm hover:bg-card"
-        aria-expanded={open}
-        onClick={() => setOpen((value) => !value)}
-      >
-        <Gem className="size-4 text-brand" />
-        <span className="tabular font-semibold">{formatNumber(user.balance)}</span>
-        {compact ? null : <span className="hidden text-muted sm:inline">баллов</span>}
-        <ChevronDown className="size-3.5 text-muted" />
-      </button>
-      {open ? (
-        <div className="absolute right-0 z-40 mt-1 w-64 rounded-lg border border-line bg-surface p-3 shadow-lg">
-          <p className="text-xs text-muted">Личный баланс</p>
-          <p className="mt-1 text-lg font-bold text-brand tabular">{formatNumber(user.balance)}</p>
-          <p className="mt-3 text-xs text-muted">Рабочий баланс · поощрения</p>
-          <p className="mt-1 text-lg font-bold tabular">
-            {reward == null ? <span className="text-base font-medium text-muted">нет доступа</span> : formatNumber(reward)}
-          </p>
-          <p className="mt-2 text-xs text-muted">Покупки списывают личный. Поощрения — с рабочего.</p>
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
 function UserMenu({ compact = false }: { compact?: boolean }) {
   const [open, setOpen] = useState(false);
   const user = useStore((state) => state.people.find((person) => person.id === state.currentUserId));
   const logout = useStore((state) => state.logout);
   if (!user) return null;
   const title = user.roleTitle || ROLE_LABEL[user.role];
-
   return (
     <div className="relative">
       <button
         type="button"
         className="flex min-h-11 items-center gap-2 rounded-md px-2 hover:bg-card"
         onClick={() => setOpen((value) => !value)}
-        aria-haspopup="menu"
         aria-expanded={open}
       >
-        <span className="grid size-8 place-items-center rounded-full bg-brand-wash text-xs font-bold text-brand-deep">
-          {user.name
-            .split(" ")
-            .slice(0, 2)
-            .map((part) => part[0])
-            .join("")}
-        </span>
-        {compact ? null : (
-          <span className="hidden text-left sm:block">
-            <span className="block max-w-40 truncate text-sm leading-tight">{user.name}</span>
-            <span className="block text-xs text-muted">{title}</span>
-          </span>
-        )}
+        <UserAvatar user={user} className="size-8 text-xs" />
+        {compact ? null : <span className="hidden max-w-40 truncate text-sm sm:block">{user.name}</span>}
       </button>
       {open ? (
-        <div className="absolute right-0 z-40 mt-1 w-64 rounded-lg border border-line bg-surface p-2 shadow-lg">
+        <div className="absolute right-0 z-40 mt-1 w-56 rounded-lg border border-line bg-surface p-2 shadow-lg">
           <p className="px-2 pt-1 text-sm font-medium">{user.name}</p>
           <p className="px-2 pb-1 text-xs text-muted">{title}</p>
-          <div className="my-1 h-px bg-line" />
-          <MenuLink to="/profile" icon={<UserRound className="size-4" />} label="Профиль" onDone={() => setOpen(false)} />
-          <MenuLink to="/history" icon={<History className="size-4" />} label="История" onDone={() => setOpen(false)} />
-          <MenuLink to="/orders" icon={<ShoppingBag className="size-4" />} label="Заказы" onDone={() => setOpen(false)} />
-          <MenuLink to="/support" icon={<LifeBuoy className="size-4" />} label="Поддержка" onDone={() => setOpen(false)} />
-          {isAdminRole(user.role) ? (
-            <MenuLink
-              to="/admin"
-              icon={<LayoutDashboard className="size-4" />}
-              label="Администрирование"
-              onDone={() => setOpen(false)}
-            />
-          ) : null}
           <button
             type="button"
             className="mt-1 flex w-full min-h-10 items-center gap-2 rounded-md px-2 text-left text-sm hover:bg-card"
@@ -302,25 +274,6 @@ function UserMenu({ compact = false }: { compact?: boolean }) {
         </div>
       ) : null}
     </div>
-  );
-}
-
-function MenuLink({
-  to,
-  label,
-  icon,
-  onDone,
-}: {
-  to: "/" | "/history" | "/orders" | "/support" | "/admin" | "/profile";
-  label: string;
-  icon: ReactNode;
-  onDone: () => void;
-}) {
-  return (
-    <Link to={to} onClick={onDone} className="flex min-h-10 items-center gap-2 rounded-md px-2 text-sm hover:bg-card">
-      {icon}
-      {label}
-    </Link>
   );
 }
 

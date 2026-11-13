@@ -16,9 +16,11 @@ import { Route as CartRouteImport } from './routes/cart'
 import { Route as CatalogRouteImport } from './routes/catalog'
 import { Route as ColleaguesRouteImport } from './routes/colleagues'
 import { Route as HistoryRouteImport } from './routes/history'
+import { Route as MyActivityRouteImport } from './routes/my-activity'
 import { Route as OrdersRouteImport } from './routes/orders'
 import { Route as ProfileRouteImport } from './routes/profile'
 import { Route as SupportRouteImport } from './routes/support'
+import { Route as PeopleUserIdRouteImport } from './routes/people.$userId'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -55,6 +57,11 @@ const HistoryRoute = HistoryRouteImport.update({
   path: '/history',
   getParentRoute: () => rootRouteImport,
 } as any)
+const MyActivityRoute = MyActivityRouteImport.update({
+  id: '/my-activity',
+  path: '/my-activity',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const OrdersRoute = OrdersRouteImport.update({
   id: '/orders',
   path: '/orders',
@@ -70,6 +77,11 @@ const SupportRoute = SupportRouteImport.update({
   path: '/support',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PeopleUserIdRoute = PeopleUserIdRouteImport.update({
+  id: '/people/$userId',
+  path: '/people/$userId',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -79,9 +91,11 @@ export interface FileRoutesByFullPath {
   '/catalog': typeof CatalogRoute
   '/colleagues': typeof ColleaguesRoute
   '/history': typeof HistoryRoute
+  '/my-activity': typeof MyActivityRoute
   '/orders': typeof OrdersRoute
   '/profile': typeof ProfileRoute
   '/support': typeof SupportRoute
+  '/people/$userId': typeof PeopleUserIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -91,9 +105,11 @@ export interface FileRoutesByTo {
   '/catalog': typeof CatalogRoute
   '/colleagues': typeof ColleaguesRoute
   '/history': typeof HistoryRoute
+  '/my-activity': typeof MyActivityRoute
   '/orders': typeof OrdersRoute
   '/profile': typeof ProfileRoute
   '/support': typeof SupportRoute
+  '/people/$userId': typeof PeopleUserIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -104,9 +120,11 @@ export interface FileRoutesById {
   '/catalog': typeof CatalogRoute
   '/colleagues': typeof ColleaguesRoute
   '/history': typeof HistoryRoute
+  '/my-activity': typeof MyActivityRoute
   '/orders': typeof OrdersRoute
   '/profile': typeof ProfileRoute
   '/support': typeof SupportRoute
+  '/people/$userId': typeof PeopleUserIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -118,9 +136,11 @@ export interface FileRouteTypes {
     | '/catalog'
     | '/colleagues'
     | '/history'
+    | '/my-activity'
     | '/orders'
     | '/profile'
     | '/support'
+    | '/people/$userId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -130,9 +150,11 @@ export interface FileRouteTypes {
     | '/catalog'
     | '/colleagues'
     | '/history'
+    | '/my-activity'
     | '/orders'
     | '/profile'
     | '/support'
+    | '/people/$userId'
   id:
     | '__root__'
     | '/'
@@ -142,9 +164,11 @@ export interface FileRouteTypes {
     | '/catalog'
     | '/colleagues'
     | '/history'
+    | '/my-activity'
     | '/orders'
     | '/profile'
     | '/support'
+    | '/people/$userId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -155,9 +179,11 @@ export interface RootRouteChildren {
   CatalogRoute: typeof CatalogRoute
   ColleaguesRoute: typeof ColleaguesRoute
   HistoryRoute: typeof HistoryRoute
+  MyActivityRoute: typeof MyActivityRoute
   OrdersRoute: typeof OrdersRoute
   ProfileRoute: typeof ProfileRoute
   SupportRoute: typeof SupportRoute
+  PeopleUserIdRoute: typeof PeopleUserIdRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -211,6 +237,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof HistoryRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/my-activity': {
+      id: '/my-activity'
+      path: '/my-activity'
+      fullPath: '/my-activity'
+      preLoaderRoute: typeof MyActivityRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/orders': {
       id: '/orders'
       path: '/orders'
@@ -232,6 +265,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SupportRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/people/$userId': {
+      id: '/people/$userId'
+      path: '/people/$userId'
+      fullPath: '/people/$userId'
+      preLoaderRoute: typeof PeopleUserIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -243,9 +283,11 @@ const rootRouteChildren: RootRouteChildren = {
   CatalogRoute: CatalogRoute,
   ColleaguesRoute: ColleaguesRoute,
   HistoryRoute: HistoryRoute,
+  MyActivityRoute: MyActivityRoute,
   OrdersRoute: OrdersRoute,
   ProfileRoute: ProfileRoute,
   SupportRoute: SupportRoute,
+  PeopleUserIdRoute: PeopleUserIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

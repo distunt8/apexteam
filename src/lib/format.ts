@@ -5,10 +5,10 @@ export function formatNumber(value: number) {
 export function pointsLabel(value: number) {
   const abs = Math.abs(value) % 100;
   const digit = abs % 10;
-  if (abs > 10 && abs < 20) return "баллов";
-  if (digit === 1) return "балл";
-  if (digit >= 2 && digit <= 4) return "балла";
-  return "баллов";
+  if (abs > 10 && abs < 20) return "апексов";
+  if (digit === 1) return "апекс";
+  if (digit >= 2 && digit <= 4) return "апекса";
+  return "апексов";
 }
 
 export function formatPoints(value: number) {

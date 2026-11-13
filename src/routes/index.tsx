@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Gem, Star } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
+import { ActivityLevelCard } from "@/components/activity-level";
 import { Shell } from "@/components/shell";
 import { Button, Panel } from "@/components/ui";
 import { firstName, formatNumber, formatPoints } from "@/lib/format";
@@ -16,16 +17,12 @@ function Home() {
   const leaderboard = useStore((state) => state.leaderboard);
   const catalog = useStore((state) => state.activitiesCatalog);
   const loadActivities = useStore((state) => state.loadActivities);
-  const [helloPart, setHelloPart] = useState("Добрый день");
-
-  useEffect(() => {
-    const hour = new Date().getHours();
-    setHelloPart(hour < 12 ? "Доброе утро" : hour < 18 ? "Добрый день" : "Добрый вечер");
-  }, []);
+  const loadEngagement = useStore((state) => state.loadEngagement);
 
   useEffect(() => {
     void loadActivities();
-  }, [loadActivities]);
+    void loadEngagement();
+  }, [loadActivities, loadEngagement]);
 
   if (!user) return null;
 
@@ -36,6 +33,8 @@ function Home() {
           .filter((person) => person.status === "active")
           .sort((a, b) => b.score - a.score)
           .map((person) => ({ id: person.id, name: person.name, score: person.score }));
+  const top = board.slice(0, 6);
+  const greet = user.firstName?.trim() || firstName(user.name);
   const popular = products.filter((product) => product.active && product.popular);
   const activities = [
     ...catalog.quests.map((item) => ({
@@ -46,7 +45,7 @@ function Home() {
     ...catalog.surveys.map((item) => ({
       id: `survey-${item.id}`,
       title: item.title,
-      prize: "Опрос",
+      prize: item.reward > 0 ? formatPoints(item.reward) : "Опрос",
     })),
     ...catalog.events.map((item) => ({
       id: `event-${item.id}`,
@@ -57,26 +56,29 @@ function Home() {
 
   return (
     <Shell mode="top">
-      <h1 className="text-[1.75rem] font-bold tracking-tight" suppressHydrationWarning>
-        {helloPart}, {firstName(user.name)}!
-      </h1>
+      <h1 className="text-[1.75rem] font-bold tracking-tight">Здравствуйте, {greet}!</h1>
       <p className="mt-2 text-sm text-muted">Спасибо, что делаете нашу компанию лучше каждый день.</p>
 
       <div className="mt-6 hidden items-start gap-4 lg:grid lg:grid-cols-[minmax(0,1fr)_300px]">
-        <Leaderboard board={board} />
-        <BalanceCard user={user} />
         <div className="min-w-0 space-y-4">
+          <Leaderboard board={top} />
+          <Achievements items={catalog.achievements} />
           <ActivitiesPreview items={activities} loading={catalog.status === "loading" || catalog.status === "idle"} />
           <Feed people={people} feed={feed} />
         </div>
-        <Popular products={popular} />
+        <div className="min-w-0 space-y-4">
+          <ActivityLevelCard />
+          <BalanceCard user={user} />
+          <Popular products={popular} />
+        </div>
       </div>
 
       <div className="mt-6 space-y-4 lg:hidden">
+        <ActivityLevelCard />
         <BalanceCard user={user} />
         <ActivitiesPreview items={activities} loading={catalog.status === "loading" || catalog.status === "idle"} scroll />
+        <Leaderboard board={top} />
         <Achievements items={catalog.achievements} />
-        <Leaderboard board={board} />
         <Feed people={people} feed={feed} />
         <Popular products={popular} />
       </div>
@@ -94,7 +96,12 @@ function Leaderboard({ board }: { board: { id: string; name: string; score: numb
       ) : (
         <ol className="mt-4 grid gap-2 sm:grid-cols-2">
           {board.map((person, index) => (
-            <li key={person.id} className="flex min-w-0 items-center gap-3 rounded-lg bg-surface px-3 py-2.5">
+            <li key={person.id}>
+              <Link
+                to="/people/$userId"
+                params={{ userId: person.id }}
+                className="flex min-w-0 items-center gap-3 rounded-lg bg-surface px-3 py-2.5 hover:bg-brand-wash"
+              >
               <span
                 className={`grid size-7 shrink-0 place-items-center rounded-full text-sm font-bold ${
                   index < 3 ? "bg-brand text-white" : "bg-brand-wash text-brand-deep"
@@ -104,6 +111,7 @@ function Leaderboard({ board }: { board: { id: string; name: string; score: numb
               </span>
               <span className="min-w-0 flex-1 truncate text-sm">{person.name}</span>
               <span className="tabular shrink-0 text-sm font-semibold">{formatNumber(person.score)}</span>
+              </Link>
             </li>
           ))}
         </ol>
@@ -201,7 +209,8 @@ function Feed({ people, feed }: { people: Person[]; feed: FeedItem[] }) {
             <li key={item.id} className="rounded-lg bg-card px-4 py-3 text-sm">
               <span className="font-semibold">{from?.name || item.fromName || "Сотрудник"}</span>
               <span className="text-muted"> → {to?.name || item.toName || "Сотрудник"}</span>
-              <span> — {item.message}</span>
+              <span> — {item.message || "без сообщения"}</span>
+              {item.amount > 0 ? <span className="font-semibold text-brand"> +{formatNumber(item.amount)}</span> : null}
               {item.kind === "manager" ? (
                 <span className="ml-2 text-xs font-semibold text-brand">поощрение</span>
               ) : null}

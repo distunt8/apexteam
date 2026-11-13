@@ -70,7 +70,7 @@ function ActivitiesPage() {
           className="pl-9"
         />
       </div>
-      <div className="mt-4 flex gap-2 overflow-x-auto">
+      <div className="mt-4 flex flex-wrap gap-2">
         {FILTERS.map((item) => (
           <Chip key={item.id} active={filter === item.id} onClick={() => setFilter(item.id)}>
             {item.label}
@@ -139,6 +139,7 @@ function Card({
 function QuestCard({ quest }: { quest: QuestView }) {
   const join = useStore((state) => state.joinQuest);
   const completeStep = useStore((state) => state.completeQuestStep);
+  const updateProof = useStore((state) => state.updateQuestProof);
   const finish = useStore((state) => state.finishQuest);
   const [busy, setBusy] = useState("");
   const joined = quest.status === "in_progress" || quest.status === "completed";
@@ -177,9 +178,12 @@ function QuestCard({ quest }: { quest: QuestView }) {
               key={step.id}
               index={index}
               step={step}
-              busy={busy === step.id}
+              busy={busy === step.id || busy === `${step.id}-edit`}
               onComplete={(proof) =>
-                void run(step.id, completeStep(quest.id, step.id, proof), step.completed ? "Уже отмечено" : "Шаг отмечен")
+                void run(step.id, completeStep(quest.id, step.id, proof), "Подтверждение отправлено")
+              }
+              onUpdate={(proof) =>
+                void run(`${step.id}-edit`, updateProof(quest.id, step.id, proof), "Подтверждение обновлено")
               }
             />
           ))}
@@ -199,16 +203,21 @@ function StepRow({
   index,
   busy,
   onComplete,
+  onUpdate,
 }: {
   step: QuestStepView;
   index: number;
   busy: boolean;
   onComplete: (proof?: { storagePath?: string; comment?: string }) => void;
+  onUpdate: (proof: { storagePath?: string; comment?: string }) => void;
 }) {
-  const [comment, setComment] = useState("");
-  const [path, setPath] = useState("");
+  const [comment, setComment] = useState(step.proofComment);
+  const [path, setPath] = useState(step.proofPath);
+  const [editing, setEditing] = useState(false);
   const proof = step.completionType === "proof";
   const automatic = step.completionType === "automatic";
+  const sent = proof && (step.proofStatus === "pending" || step.proofStatus === "approved" || step.proofStatus === "rejected");
+  const showForm = proof && !step.completed && !automatic && (!sent || step.proofStatus === "rejected" || editing);
   return (
     <li className="rounded-md bg-surface px-3 py-3">
       <p className="text-sm font-semibold">
@@ -220,15 +229,36 @@ function StepRow({
         {step.completed ? "Выполнено" : automatic ? "Засчитывается автоматически" : proof ? "Нужно подтверждение" : "Отмечается вручную"}
         {step.proofStatus ? ` · ${proofLabel(step.proofStatus)}` : ""}
       </p>
-      {step.completed || automatic ? null : proof ? (
+      {sent && step.proofPath ? <p className="mt-2 break-all text-sm">{step.proofPath}</p> : null}
+      {sent && step.proofComment ? <p className="mt-1 text-sm text-muted">{step.proofComment}</p> : null}
+      {showForm ? (
         <div className="mt-3 grid gap-2">
           <TextInput value={path} onChange={(event) => setPath(event.target.value)} placeholder="Ссылка или путь к подтверждению" />
           <TextArea value={comment} onChange={(event) => setComment(event.target.value)} placeholder="Комментарий" className="min-h-16" />
-          <Button disabled={busy || !path.trim()} onClick={() => onComplete({ storagePath: path, comment })}>
-            Отправить подтверждение
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              disabled={busy || !path.trim()}
+              onClick={() => {
+                if (step.proofStatus === "pending") {
+                  setEditing(false);
+                  onUpdate({ storagePath: path, comment });
+                } else onComplete({ storagePath: path, comment });
+              }}
+            >
+              {step.proofStatus === "pending" ? "Обновить подтверждение" : "Отправить подтверждение"}
+            </Button>
+            {editing && step.proofStatus === "pending" ? (
+              <Button variant="line" onClick={() => setEditing(false)}>
+                Отмена
+              </Button>
+            ) : null}
+          </div>
         </div>
-      ) : (
+      ) : sent && step.proofStatus === "pending" ? (
+        <Button className="mt-3" variant="line" disabled={busy} onClick={() => setEditing(true)}>
+          Изменить подтверждение
+        </Button>
+      ) : step.completed || automatic || proof ? null : (
         <Button className="mt-3" disabled={busy} onClick={() => onComplete()}>
           Отметить шаг
         </Button>
@@ -266,6 +296,7 @@ function SurveyCard({ survey }: { survey: SurveyView }) {
       {survey.description ? <p className="mt-1 max-w-2xl text-sm text-muted">{survey.description}</p> : null}
       <p className="mt-2 text-sm text-muted">
         {survey.questionsCount} {questionsLabel(survey.questionsCount)}
+        {survey.reward > 0 ? ` · ${formatPoints(survey.reward)}` : ""}
         {survey.hasResponded ? " · вы уже отвечали" : ""}
       </p>
       {survey.questions.length === 0 ? <p className="mt-3 text-sm text-muted">Вопросов пока нет.</p> : null}
