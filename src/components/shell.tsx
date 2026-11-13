@@ -129,8 +129,8 @@ export function Shell({
                   to={item.to}
                   onClick={() => setOpen(false)}
                   className={cn(
-                    "flex min-h-11 items-center gap-2 rounded-md px-3 text-[15px]",
-                    activePath(path, item.to) ? "bg-brand-wash font-bold text-brand" : "text-ink hover:bg-surface",
+                    "flex min-h-11 items-center gap-2.5 rounded-md px-3 text-[15px]",
+                    activePath(path, item.to) ? "bg-brand-wash font-semibold text-brand" : "text-ink hover:bg-surface",
                   )}
                 >
                   <Icon className="size-4 shrink-0" />
@@ -207,7 +207,7 @@ export function Shell({
             </div>
           ) : null}
           <div className="hidden items-center gap-2 lg:flex">
-            <UserAvatar user={user} className="size-8 text-xs" />
+            <UserAvatar user={user} className="size-10" />
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-medium">{user.name}</p>
               <p className="truncate text-xs text-muted">{user.roleTitle || ROLE_LABEL[user.role]}</p>
@@ -218,7 +218,7 @@ export function Shell({
       </aside>
 
       <main className="lg:pl-[260px]">
-        <div className="mx-auto w-full min-w-0 max-w-[1100px] px-4 pt-5 pb-10 sm:px-6">{children}</div>
+        <div className="mx-auto w-full min-w-0 max-w-[1080px] px-4 pt-8 pb-16 sm:px-8">{children}</div>
       </main>
     </div>
   );
@@ -253,7 +253,7 @@ function UserMenu({ compact = false }: { compact?: boolean }) {
         onClick={() => setOpen((value) => !value)}
         aria-expanded={open}
       >
-        <UserAvatar user={user} className="size-8 text-xs" />
+        <UserAvatar user={user} className="size-10" />
         {compact ? null : <span className="hidden max-w-40 truncate text-sm sm:block">{user.name}</span>}
       </button>
       {open ? (

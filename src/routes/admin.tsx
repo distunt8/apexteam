@@ -3,6 +3,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Pager, usePage } from "@/components/pager";
+import { UserAvatar } from "@/components/user-avatar";
 import { Shell } from "@/components/shell";
 import { Button, Field, TextArea, TextInput } from "@/components/ui";
 import { formatNumber } from "@/lib/format";
@@ -467,8 +468,13 @@ function People() {
               return (
                 <tr key={person.id} className="border-t border-line">
                   <td className="px-3 py-2">
-                    <p className="font-medium">{person.name}</p>
-                    <p className="text-xs text-muted">{person.position}</p>
+                    <div className="flex items-center gap-2">
+                      <UserAvatar user={person} className="size-8" />
+                      <div>
+                        <p className="font-medium">{person.name}</p>
+                        <p className="text-xs text-muted">{person.position}</p>
+                      </div>
+                    </div>
                     <button
                       type="button"
                       className="mt-1 text-xs font-semibold text-brand"

@@ -18,8 +18,9 @@ export function UserAvatar({
   return (
     <span
       className={cn(
-        "inline-grid size-10 shrink-0 place-items-center overflow-hidden rounded-full bg-brand-wash font-bold text-brand-deep",
+        "inline-grid size-10 shrink-0 place-items-center overflow-hidden rounded-full bg-brand-wash text-xs font-bold text-brand-deep",
         className,
+        "rounded-full",
       )}
     >
       {src && src !== failed ? (
@@ -60,11 +61,7 @@ export function AvatarEditor({ user, compact = false }: { user: Person; compact?
   );
   return (
     <div className="flex flex-wrap items-center gap-3">
-      <UserAvatar
-        user={user}
-        src={preview ?? user.avatarUrl}
-        className={compact ? "size-12 text-sm" : "size-20 rounded-2xl text-xl"}
-      />
+      <UserAvatar user={user} src={preview ?? user.avatarUrl} className="size-16 text-base" />
       <div className="space-y-1">
         <input
           ref={input}

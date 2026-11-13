@@ -96,17 +96,17 @@ function CatalogPage() {
       ) : (
         <ul className="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {page.items.map((product) => (
-            <li key={product.id} className="flex flex-col overflow-hidden rounded-xl border border-line bg-card">
+            <li key={product.id} className="flex flex-col overflow-hidden rounded-xl border border-line bg-surface transition hover:-translate-y-0.5 hover:border-brand-mid">
               <button type="button" className="text-left" onClick={() => setOpened(product)}>
-                <div className="relative overflow-hidden bg-brand-soft">
+                <div className="overflow-hidden bg-brand-soft">
                   <img src={product.image} alt="" className="aspect-[4/3] w-full object-cover" />
-                  <span className="absolute top-3 left-3 rounded-full bg-surface/95 px-2.5 py-1 text-xs font-semibold text-brand">
-                    {formatPoints(product.price)}
-                  </span>
                 </div>
                 <div className="p-4 pb-0">
                   <p className="text-xs font-medium text-brand">{categoryLabel(product.category, product.categoryName)}</p>
-                  <h2 className="mt-1 font-bold">{product.title}</h2>
+                  <div className="mt-1 flex items-start justify-between gap-3">
+                    <h2 className="font-bold">{product.title}</h2>
+                    <p className="shrink-0 text-sm font-bold text-brand">{formatPoints(product.price)}</p>
+                  </div>
                   <p className="mt-1 line-clamp-2 text-sm text-muted">{product.description}</p>
                   <p className="mt-3 text-xs text-muted">{product.stock > 0 ? `В наличии: ${product.stock}` : "Нет в наличии"}</p>
                 </div>
@@ -166,11 +166,12 @@ function ProductCard({
     ]).then(([listed, details]) => {
       if (ignore) return;
       const source = listed ?? (details && typeof details === "object" ? (details as { variants?: unknown }).variants : null);
-      setVariants(
-        listOf(source)
-          .map(mapVariant)
-          .filter((item): item is ProductVariant => item != null && item.active),
-      );
+      const next = listOf(source)
+        .map(mapVariant)
+        .filter((item): item is ProductVariant => item != null && item.active);
+      setVariants(next);
+      const same = next.find((item) => item.image && item.image === product.image) ?? next[0];
+      if (same) setSelectedId(same.id);
     });
     return () => {
       ignore = true;
@@ -214,13 +215,6 @@ function ProductCard({
               <div className="mt-4">
                 <p className="text-xs text-muted">Вариант</p>
                 <div className="mt-2 flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setSelectedId("")}
-                    className={`min-h-9 rounded-full px-3 text-sm font-medium ${selectedId === "" ? "bg-brand text-white" : "bg-card"}`}
-                  >
-                    Основной
-                  </button>
                   {variants.map((item) => (
                     <button
                       key={item.id}

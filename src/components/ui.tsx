@@ -13,7 +13,7 @@ export function Button({
     <button
       type={type}
       className={cn(
-        "inline-flex min-h-11 items-center justify-center gap-2 rounded-md px-4 text-sm font-semibold transition-colors duration-150 disabled:pointer-events-none disabled:opacity-45",
+        "inline-flex min-h-11 items-center justify-center gap-2 rounded-md px-4 text-sm font-semibold disabled:pointer-events-none disabled:opacity-45",
         variant === "primary" && "bg-brand text-white hover:bg-brand-strong",
         variant === "ghost" && "bg-transparent text-ink hover:bg-brand-wash",
         variant === "soft" && "bg-brand-wash text-brand-deep hover:bg-brand-soft",
@@ -81,7 +81,7 @@ export function Chip({
       type="button"
       onClick={onClick}
       className={cn(
-        "min-h-10 rounded-full px-3 text-sm font-medium",
+        "min-h-10 rounded-full px-3.5 text-sm font-medium",
         active ? "bg-brand text-white" : "bg-card text-ink hover:bg-brand-wash",
       )}
     >
@@ -91,5 +91,5 @@ export function Chip({
 }
 
 export function Panel({ className, children }: { className?: string; children: ReactNode }) {
-  return <section className={cn("rounded-xl bg-card p-4 sm:p-5", className)}>{children}</section>;
+  return <section className={cn("rounded-xl border border-line bg-surface p-5 sm:p-6", className)}>{children}</section>;
 }

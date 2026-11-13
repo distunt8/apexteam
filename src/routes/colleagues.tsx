@@ -5,7 +5,8 @@ import { toast } from "sonner";
 import { Pager, usePage } from "@/components/pager";
 import { Shell } from "@/components/shell";
 import { Button, TextArea, TextInput } from "@/components/ui";
-import { formatNumber, initials, pointsLabel } from "@/lib/format";
+import { UserAvatar } from "@/components/user-avatar";
+import { formatNumber, pointsLabel } from "@/lib/format";
 import { awardAmounts, hasWorkBalance, PEER_THANKS_AMOUNT, useStore } from "@/lib/store";
 
 export const Route = createFileRoute("/colleagues")({ component: ColleaguesPage });
@@ -103,9 +104,7 @@ function ColleaguesPage() {
               return (
                 <li key={person.id} className={`rounded-lg px-3 py-3 ${on ? "bg-brand-wash" : "bg-card"}`}>
                   <div className="flex items-center gap-3">
-                    <span className="grid size-11 shrink-0 place-items-center rounded-full bg-brand text-sm font-bold text-white">
-                      {initials(person.name)}
-                    </span>
+                    <UserAvatar user={person} className="size-11" />
                     <span className="min-w-0 flex-1">
                       <Link to="/people/$userId" params={{ userId: person.id }} className="block truncate font-semibold hover:text-brand">
                         {person.name}

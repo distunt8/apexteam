@@ -33,15 +33,15 @@ function ProfilePage() {
   return (
     <Shell mode="shop">
       <h1 className="text-3xl font-bold tracking-tight">Профиль</h1>
-      <div className="mt-5">
-        <p className="text-xl font-bold">{user.name}</p>
-        <p className="text-sm text-muted">{user.position}</p>
-        <p className="text-sm text-muted">
-          {user.department} · {user.roleTitle || ROLE_LABEL[user.role]}
-        </p>
-      </div>
-      <div className="mt-4">
+      <div className="mt-5 flex flex-wrap items-center gap-4">
         <AvatarEditor user={user} />
+        <div className="min-w-0">
+          <p className="text-xl font-bold">{user.name}</p>
+          <p className="text-sm text-muted">{user.position}</p>
+          <p className="text-sm text-muted">
+            {user.department} · {user.roleTitle || ROLE_LABEL[user.role]}
+          </p>
+        </div>
       </div>
 
       <ThemeSwitch />

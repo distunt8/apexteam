@@ -3,6 +3,7 @@ import { AuthProvider } from "@/lib/auth/provider";
 import { PreviewHostBridge } from "@/components/preview-host-bridge";
 import { SessionGate } from "@/components/auth-gate";
 import { THEME_BOOT, ThemeProvider, useTheme } from "@/lib/theme";
+import { EasterEggs } from "@/components/easter-eggs";
 import { Toaster } from "sonner";
 import appCss from "../styles.css?url";
 
@@ -24,7 +25,7 @@ export const Route = createRootRoute({
       { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
       {
         rel: "stylesheet",
-        href: "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap",
+        href: "https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700&display=swap",
       },
       { rel: "stylesheet", href: appCss },
       { rel: "manifest", href: "/__grok/manifest.webmanifest" },
@@ -50,6 +51,7 @@ function RootDocument() {
             </SessionGate>
           </AuthProvider>
           <ThemedToaster />
+          <EasterEggs />
         </ThemeProvider>
         <Scripts />
       </body>
