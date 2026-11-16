@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, type ReactNode } from "react";
 import { ActivityLevelCard } from "@/components/activity-level";
+import { AchievementMark } from "@/components/achievement-mark";
 import { Shell } from "@/components/shell";
 import { Panel } from "@/components/ui";
 import { formatPoints } from "@/lib/format";
@@ -30,24 +31,30 @@ function MyActivityPage() {
         <ActivityLevelCard detailed />
       </div>
       <div className="mt-4 grid gap-4 lg:grid-cols-2">
-        <Block title="Квесты" empty="Вы ещё не вступали в квесты">
+        <Block title="Квесты" tone="border-sky-300" empty="Вы ещё не вступали в квесты">
           {quests.map((item) => (
             <Row key={item.id} title={item.title} meta={item.status === "completed" ? "Завершён" : "В процессе"} extra={formatPoints(item.reward)} />
           ))}
         </Block>
-        <Block title="Опросы" empty="Ответов пока нет">
+        <Block title="Опросы" tone="border-amber-300" empty="Ответов пока нет">
           {surveys.map((item) => (
             <Row key={item.id} title={item.title} meta="Ответ отправлен" extra={item.reward > 0 ? formatPoints(item.reward) : ""} />
           ))}
         </Block>
-        <Block title="Мероприятия" empty="Записей пока нет">
+        <Block title="Мероприятия" tone="border-emerald-300" empty="Записей пока нет">
           {events.map((item) => (
             <Row key={item.id} title={item.title} meta={item.status === "attended" ? "Посещение подтверждено" : "Вы записаны"} />
           ))}
         </Block>
-        <Block title="Достижения" empty="Открытых достижений пока нет">
+        <Block title="Достижения" tone="border-violet-300" empty="Открытых достижений пока нет">
           {badges.map((item) => (
-            <Row key={item.id} title={item.name} meta={item.description} />
+            <li key={item.id} className="flex items-center gap-3 rounded-lg bg-surface px-3 py-2">
+              <AchievementMark iconUrl={item.iconUrl} earned />
+              <div>
+                <p className="text-sm font-semibold">{item.name}</p>
+                <p className="mt-0.5 text-xs text-muted">{item.description}</p>
+              </div>
+            </li>
           ))}
         </Block>
       </div>
@@ -62,10 +69,10 @@ function MyActivityPage() {
   );
 }
 
-function Block({ title, empty, children }: { title: string; empty: string; children: ReactNode }) {
+function Block({ title, empty, tone, children }: { title: string; empty: string; tone: string; children: ReactNode }) {
   const list = Array.isArray(children) ? children.filter(Boolean) : children ? [children] : [];
   return (
-    <Panel>
+    <Panel className={`border-l-4 ${tone}`}>
       <h2 className="font-bold">{title}</h2>
       {list.length === 0 ? <p className="mt-3 text-sm text-muted">{empty}</p> : <ul className="mt-3 space-y-2">{children}</ul>}
     </Panel>

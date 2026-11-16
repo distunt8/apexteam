@@ -2,6 +2,7 @@ import { UserAvatar } from "@/components/user-avatar";
 import { Link, useRouterState } from "@tanstack/react-router";
 import {
   ChevronDown,
+  Bell,
   Gem,
   History,
   Home,
@@ -9,6 +10,7 @@ import {
   LifeBuoy,
   LogOut,
   Menu,
+  Settings,
   ShoppingBag,
   UserRound,
   Users,
@@ -99,6 +101,9 @@ export function Shell({
         </button>
         <Link to="/" aria-label="На главную">
           <Wordmark className="h-8" />
+        </Link>
+        <Link to="/notifications" className="grid size-11 place-items-center" aria-label="Уведомления">
+          <Bell className="size-5" />
         </Link>
         <UserMenu compact />
       </header>
@@ -212,13 +217,16 @@ export function Shell({
               <p className="truncate text-sm font-medium">{user.name}</p>
               <p className="truncate text-xs text-muted">{user.roleTitle || ROLE_LABEL[user.role]}</p>
             </div>
+            <Link to="/settings" className="grid size-10 place-items-center rounded-md hover:bg-surface" aria-label="Настройки">
+              <Settings className="size-4" />
+            </Link>
             <Logout />
           </div>
         </div>
       </aside>
 
       <main className="lg:pl-[260px]">
-        <div className="mx-auto w-full min-w-0 max-w-[1080px] px-4 pt-8 pb-16 sm:px-8">{children}</div>
+        <div className="mx-auto w-full min-w-0 max-w-[1400px] px-2 pt-4 pb-12 sm:px-3">{children}</div>
       </main>
     </div>
   );

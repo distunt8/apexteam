@@ -1,12 +1,14 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { Gem, Star } from "lucide-react";
-import { useEffect } from "react";
+import { Gem } from "lucide-react";
+import { useEffect, useState } from "react";
 import { ActivityLevelCard } from "@/components/activity-level";
+import { AchievementMark } from "@/components/achievement-mark";
 import { UserAvatar } from "@/components/user-avatar";
 import { Shell } from "@/components/shell";
 import { Button, Panel } from "@/components/ui";
 import { firstName, formatNumber, formatPoints } from "@/lib/format";
 import { hasWorkBalance, useStore, type FeedItem, type Person, type Product } from "@/lib/store";
+import { apex } from "@/lib/apex";
 
 export const Route = createFileRoute("/")({ component: Home });
 
@@ -16,13 +18,29 @@ function Home() {
   const feed = useStore((state) => state.feed);
   const products = useStore((state) => state.products);
   const leaderboard = useStore((state) => state.leaderboard);
+  const leaderboardKind = useStore((state) => state.leaderboardKind);
   const catalog = useStore((state) => state.activitiesCatalog);
   const loadActivities = useStore((state) => state.loadActivities);
   const loadEngagement = useStore((state) => state.loadEngagement);
+  const [news, setNews] = useState<{ id: string; title: string; summary: string }[]>([]);
 
   useEffect(() => {
     void loadActivities();
     void loadEngagement();
+    void apex("/api/company-news?page=1&pageSize=4")
+      .then((data) => {
+        const list = Array.isArray(data) ? data : (data as { items?: unknown[] })?.items;
+        if (!Array.isArray(list)) return;
+        setNews(
+          list
+            .map((item) => {
+              const record = item as { id?: unknown; title?: unknown; summary?: unknown };
+              return { id: String(record.id ?? ""), title: String(record.title ?? ""), summary: String(record.summary ?? "") };
+            })
+            .filter((item) => item.id && item.title),
+        );
+      })
+      .catch(() => undefined);
   }, [loadActivities, loadEngagement]);
 
   if (!user) return null;
@@ -34,22 +52,25 @@ function Home() {
           .filter((person) => person.status === "active")
           .sort((a, b) => b.score - a.score)
           .map((person) => ({ id: person.id, name: person.name, score: person.score }));
-  const top = board.slice(0, 6);
+  const top = board.slice(0, 5);
   const greet = user.firstName?.trim() || firstName(user.name);
   const popular = products.filter((product) => product.active && product.popular);
   const activities = [
     ...catalog.quests.map((item) => ({
       id: `quest-${item.id}`,
+      kind: "quest" as const,
       title: item.title,
       prize: item.reward > 0 ? formatPoints(item.reward) : "Квест",
     })),
     ...catalog.surveys.map((item) => ({
       id: `survey-${item.id}`,
+      kind: "survey" as const,
       title: item.title,
       prize: item.reward > 0 ? formatPoints(item.reward) : "Опрос",
     })),
     ...catalog.events.map((item) => ({
       id: `event-${item.id}`,
+      kind: "event" as const,
       title: item.title,
       prize: item.reward > 0 ? formatPoints(item.reward) : "Мероприятие",
     })),
@@ -57,13 +78,13 @@ function Home() {
 
   return (
     <Shell mode="top">
-      <p className="text-xs font-semibold tracking-[0.16em] text-brand uppercase">Апекс</p>
-      <h1 className="mt-2 text-4xl font-bold">Здравствуйте, {greet}</h1>
+      <h1 className="text-4xl font-bold">Здравствуйте, {greet}</h1>
       <p className="mt-3 max-w-xl text-base text-muted">Спасибо, что делаете нашу компанию лучше каждый день.</p>
 
       <div className="mt-10 hidden items-start gap-8 lg:grid lg:grid-cols-[minmax(0,1fr)_300px]">
         <div className="min-w-0 space-y-10">
-          <Leaderboard board={top} people={people} />
+          <Leaderboard board={top} full={board} people={people} currentId={user.id} caption={leaderboardKind === "activity" ? "Топ по апексам за квесты, опросы, мероприятия и достижения" : "Топ по благодарностям"} />
+          {news.length > 0 ? <News items={news} /> : null}
           <Achievements items={catalog.achievements} />
           <ActivitiesPreview items={activities} loading={catalog.status === "loading" || catalog.status === "idle"} />
           <Feed people={people} feed={feed} />
@@ -79,7 +100,8 @@ function Home() {
         <ActivityLevelCard />
         <BalanceCard user={user} />
         <ActivitiesPreview items={activities} loading={catalog.status === "loading" || catalog.status === "idle"} scroll />
-        <Leaderboard board={top} people={people} />
+        <Leaderboard board={top} full={board} people={people} currentId={user.id} caption={leaderboardKind === "activity" ? "Топ по апексам за квесты, опросы, мероприятия и достижения" : "Топ по благодарностям"} />
+        {news.length > 0 ? <News items={news} /> : null}
         <Achievements items={catalog.achievements} />
         <Feed people={people} feed={feed} />
         <Popular products={popular} />
@@ -90,48 +112,82 @@ function Home() {
 
 function Leaderboard({
   board,
+  full,
   people,
+  currentId,
+  caption,
 }: {
   board: { id: string; name: string; score: number }[];
+  full: { id: string; name: string; score: number }[];
   people: Person[];
+  currentId: string;
+  caption: string;
 }) {
+  const mineAt = full.findIndex((person) => person.id === currentId);
+  const shown = mineAt >= 0 && mineAt < board.length;
+  const me = people.find((person) => person.id === currentId);
   return (
     <Panel>
       <h2 className="text-xl font-bold">Лидерборд</h2>
-      <p className="mt-1 text-sm text-muted">Топ по числу благодарностей</p>
+      <p className="mt-1 text-sm text-muted">{caption}</p>
       {board.length === 0 ? (
         <p className="mt-4 text-sm text-muted">Пока пусто.</p>
       ) : (
         <ol className="mt-5 space-y-1">
-          {board.map((person, index) => {
-            const profile = people.find((item) => item.id === person.id);
-            return (
-              <li key={person.id}>
-                <Link
-                  to="/people/$userId"
-                  params={{ userId: person.id }}
-                  className="flex min-w-0 items-center gap-3 rounded-lg px-2 py-2.5 hover:bg-brand-wash"
-                >
-                  <span
-                    className={`grid size-7 shrink-0 place-items-center rounded-full text-sm font-bold ${
-                      index < 3 ? "bg-brand text-white" : "bg-brand-wash text-brand-deep"
-                    }`}
-                  >
-                    {index + 1}
-                  </span>
-                  <UserAvatar
-                    user={{ name: person.name, avatarUrl: profile?.avatarUrl }}
-                    className="size-9"
-                  />
-                  <span className="min-w-0 flex-1 truncate text-sm">{person.name}</span>
-                  <span className="tabular shrink-0 text-sm font-semibold">{formatNumber(person.score)}</span>
-                </Link>
-              </li>
-            );
-          })}
+          {board.map((person, index) => (
+            <LeaderRow
+              key={person.id}
+              person={person}
+              place={index + 1}
+              people={people}
+              mine={person.id === currentId}
+            />
+          ))}
         </ol>
       )}
+      {!shown && me ? (
+        <div className="mt-3 border-t border-dashed border-line pt-3">
+          <LeaderRow
+            person={{ id: me.id, name: me.name, score: full[mineAt]?.score ?? me.score }}
+            place={mineAt >= 0 ? mineAt + 1 : full.length + 1}
+            people={people}
+            mine
+          />
+        </div>
+      ) : null}
     </Panel>
+  );
+}
+
+function LeaderRow({
+  person,
+  place,
+  people,
+  mine,
+}: {
+  person: { id: string; name: string; score: number };
+  place: number;
+  people: Person[];
+  mine: boolean;
+}) {
+  const profile = people.find((item) => item.id === person.id);
+  return (
+    <Link
+      to="/people/$userId"
+      params={{ userId: person.id }}
+      className={`flex min-w-0 items-center gap-3 rounded-lg px-2 py-2.5 transition hover:bg-brand-wash ${mine ? "bg-brand-wash ring-1 ring-brand" : ""}`}
+    >
+      <span
+        className={`grid size-7 shrink-0 place-items-center rounded-full text-sm font-bold ${
+          place <= 3 ? "bg-brand text-white" : "bg-brand-wash text-brand-deep"
+        }`}
+      >
+        {place}
+      </span>
+      <UserAvatar user={{ name: person.name, avatarUrl: profile?.avatarUrl }} className="size-9" />
+      <span className="min-w-0 flex-1 truncate text-sm">{person.name}</span>
+      <span className="tabular shrink-0 text-sm font-semibold">{formatNumber(person.score)}</span>
+    </Link>
   );
 }
 
@@ -139,18 +195,18 @@ function BalanceCard({ user }: { user: Person }) {
   const reward = useStore((state) => state.rewardBalance);
   const showWork = hasWorkBalance(user.role);
   return (
-    <Panel className="border-transparent bg-brand text-white">
+    <Panel className="border-brand-soft bg-gradient-to-br from-brand-wash via-surface to-card text-ink">
       <h2 className="text-lg font-bold">{showWork ? "Балансы" : "Ваш баланс"}</h2>
-      {showWork ? <p className="mt-4 text-xs text-white/75">Личный</p> : null}
-      <p className={`${showWork ? "" : "mt-3"} text-3xl font-bold`}>{formatPoints(user.balance)}</p>
+      {showWork ? <p className="mt-4 text-xs text-muted">Личный</p> : null}
+      <p className={`${showWork ? "" : "mt-3"} text-3xl font-bold text-brand`}>{formatPoints(user.balance)}</p>
       {showWork ? (
         <>
-          <p className="mt-4 text-xs text-white/75">Рабочий · поощрения</p>
+          <p className="mt-4 text-xs text-muted">Рабочий · поощрения</p>
           <p className="text-xl font-bold">{reward == null ? "нет доступа" : formatPoints(reward)}</p>
         </>
       ) : null}
       <Link to="/catalog" className="mt-6 block">
-        <Button className="w-full bg-white text-brand hover:bg-brand-wash">В магазин за призами</Button>
+        <Button className="w-full">В магазин за призами</Button>
       </Link>
     </Panel>
   );
@@ -161,7 +217,7 @@ function ActivitiesPreview({
   loading,
   scroll = false,
 }: {
-  items: { id: string; title: string; prize: string }[];
+  items: { id: string; kind: "quest" | "survey" | "event"; title: string; prize: string }[];
   loading: boolean;
   scroll?: boolean;
 }) {
@@ -178,7 +234,12 @@ function ActivitiesPreview({
       ) : (
         <div className={scroll ? "mt-3 flex gap-3 overflow-x-auto pb-1" : "mt-3 grid grid-cols-3 gap-3"}>
           {items.map((item) => (
-            <Link key={item.id} to="/activities" className={`rounded-lg bg-card p-4 hover:bg-brand-wash ${scroll ? "w-56 shrink-0" : ""}`}>
+            <Link
+              key={item.id}
+              to="/activities"
+              search={{ kind: item.kind, focus: item.id }}
+              className={`rounded-xl border border-line bg-gradient-to-b from-surface to-card p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-brand-mid hover:shadow-md ${scroll ? "w-56 shrink-0" : ""}`}
+            >
               <p className="font-bold">{item.title}</p>
               <p className="mt-8 text-sm text-brand">{item.prize}</p>
             </Link>
@@ -189,19 +250,35 @@ function ActivitiesPreview({
   );
 }
 
-function Achievements({ items }: { items: { id: string; name: string; earned: boolean }[] }) {
+function Achievements({ items }: { items: { id: string; name: string; earned: boolean; iconUrl?: string }[] }) {
   if (items.length === 0) return null;
   return (
     <section>
       <h2 className="text-xl font-bold">Достижения</h2>
       <div className="mt-3 grid grid-cols-3 gap-3">
         {items.map((item) => (
-          <Link key={item.id} to="/activities" className="rounded-lg bg-card px-2 py-4 text-center hover:bg-brand-wash">
-            <Star className={`mx-auto size-6 ${item.earned ? "fill-brand text-brand" : "text-brand-soft"}`} />
+          <Link key={item.id} to="/activities" search={{ kind: "achievement", focus: `achievement-${item.id}` }} className="rounded-xl bg-card px-2 py-4 text-center shadow-sm transition hover:-translate-y-0.5 hover:bg-brand-wash hover:shadow-md">
+            <AchievementMark iconUrl={item.iconUrl} earned={item.earned} className="mx-auto size-8" />
             <p className="mt-2 text-xs leading-tight">{item.name}</p>
           </Link>
         ))}
       </div>
+    </section>
+  );
+}
+
+function News({ items }: { items: { id: string; title: string; summary: string }[] }) {
+  return (
+    <section>
+      <h2 className="text-xl font-bold">Новости</h2>
+      <ul className="mt-3 space-y-2">
+        {items.map((item) => (
+          <li key={item.id} className="rounded-xl bg-gradient-to-r from-brand-wash to-surface px-4 py-3 shadow-sm">
+            <p className="font-semibold">{item.title}</p>
+            {item.summary ? <p className="mt-1 text-sm text-muted">{item.summary}</p> : null}
+          </li>
+        ))}
+      </ul>
     </section>
   );
 }

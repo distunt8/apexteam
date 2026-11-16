@@ -284,13 +284,28 @@ function mapProduct(raw: unknown, index: number, names: Map<string, string>): Pr
   const categoryId = record.categoryId ?? category?.id;
   const categoryName = str(record.categoryName || category?.name || names.get(str(categoryId)) || "");
   const image = str(record.imageUrl || record.image);
+  const listPrice = num(record.originalPrice ?? record.price);
+  const finalPrice = record.finalPrice == null ? listPrice : num(record.finalPrice);
+  const badges = asArray(record.badges)
+    .map((item) => {
+      const row = obj(item);
+      if (!row) return null;
+      const name = str(row.name);
+      if (!name) return null;
+      const color = str(row.color || "#306cc0");
+      return { name, color: /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(color) ? color : "#306cc0" };
+    })
+    .filter((item): item is { name: string; color: string } => Boolean(item));
   return {
     id: str(id),
     category: categoryId == null ? "" : str(categoryId),
     categoryName,
     title: str(record.name || record.title || "Товар"),
     description: str(record.description),
-    price: num(record.price),
+    price: finalPrice || listPrice,
+    originalPrice: listPrice > finalPrice ? listPrice : undefined,
+    discountPercent: record.discountPercent == null ? undefined : num(record.discountPercent),
+    badges,
     stock: record.stock == null ? (record.isDigital ? 99 : 0) : num(record.stock),
     active: record.isActive !== false && record.active !== false,
     image: image || FALLBACKS[index % FALLBACKS.length] || "/rewards/card-a.jpg",
@@ -305,11 +320,19 @@ function mapCartItem(raw: unknown): CartItem | null {
   const product = obj(record.product);
   const productId = record.productId ?? product?.id;
   if (productId == null) return null;
+  const variant = obj(record.variant) ?? obj(record.productVariant);
   const lineId = record.id ?? record.cartItemId ?? record.itemId;
+  const variantId = str(record.variantId ?? record.productVariantId ?? variant?.id ?? "");
   return {
     lineId: lineId == null ? "" : str(lineId),
     productId: str(productId),
     qty: Math.max(1, num(record.quantity ?? record.qty ?? 1)),
+    variantId: variantId || undefined,
+    variantName: str(variant?.name ?? record.variantName ?? "") || undefined,
+    unitPrice: record.unitPrice != null || variant?.price != null || record.price != null
+      ? num(record.unitPrice ?? variant?.price ?? record.price)
+      : undefined,
+    image: str(record.variantImageUrl ?? variant?.imageUrl ?? "") || undefined,
   };
 }
 
@@ -360,6 +383,7 @@ export function mapOrder(raw: unknown, fallbackUserId: string): Order | null {
       const mapped: OrderItem = {
         productId: str(line.productId ?? product?.id ?? ""),
         title: str(line.productName || line.name || line.title || product?.name || "Товар"),
+        variantName: str(line.variantName || obj(line.variant)?.name || obj(line.productVariant)?.name || ""),
         price: num(line.priceAtPurchase ?? line.price ?? line.unitPrice ?? product?.price),
         qty: Math.max(1, num(line.quantity ?? line.qty ?? 1)),
       };
@@ -383,7 +407,7 @@ function mapEntryType(amount: number, hint: string): LedgerEntry["type"] {
   const blob = hint.toLowerCase();
   if (/refund|возврат/.test(blob)) return "refund";
   if (/purchase|order|заказ/.test(blob)) return amount < 0 ? "purchase" : "refund";
-  if (/manager|bonus|поощр/.test(blob)) return amount < 0 ? "recognition_sent" : "manager_award";
+  if (/manager|bonus|поощр/.test(blob)) return "manager_award";
   if (/thank|благодар/.test(blob)) return amount < 0 ? "recognition_sent" : "recognition_received";
   if (/admin|коррект|adjust/.test(blob)) return "admin_adjustment";
   if (/activity|achievement|daily|актив|достиж/.test(blob)) return "activity_reward";
@@ -507,6 +531,7 @@ export interface Workspace {
   feed: FeedItem[];
   roleCatalog: RoleOption[];
   leaderboard: BoardRow[];
+  leaderboardKind: "activity" | "thanks";
   departmentIds: string[];
   rewardBalance: number | null;
   mustChangePassword: boolean;
@@ -540,6 +565,7 @@ export async function loadWorkspace(): Promise<Workspace> {
     boardRes,
     rolesRes,
     engagementRes,
+    allTxRes,
   ] = await Promise.all([
     optional("/api/users"),
     me.role === "manager" ? optional("/api/users/my-department") : Promise.resolve({ ok: false as const, error: null }),
@@ -554,9 +580,10 @@ export async function loadWorkspace(): Promise<Workspace> {
     optional("/api/orders/history"),
     optional("/api/thanks/for-me"),
     optional("/api/thanks/from-me"),
-    optional("/api/leaderboard?limit=6"),
+    optional("/api/leaderboard?limit=50"),
     mayReadRoles ? optional("/api/roles") : Promise.resolve({ ok: false as const, error: null }),
     optional("/api/me/engagement"),
+    optional("/api/balances/transactions/all?skip=0&take=500"),
   ]);
 
   const personal = personalRes.ok ? amountOf(personalRes.data) : 0;
@@ -666,12 +693,36 @@ export async function loadWorkspace(): Promise<Workspace> {
     if (!item.toName) item.toName = people.get(item.toId)?.name;
   }
 
-  const leaderboard = boardRes.ok
+  const thanksBoard = boardRes.ok
     ? noteList(boardRes.data, "Лидерборд", warnings)
         .map(mapBoard)
         .filter((item): item is BoardRow => Boolean(item))
     : [];
   if (!boardRes.ok && boardRes.error instanceof ApexError) warnings.push(`Лидерборд: ${boardRes.error.message}`);
+  const activityTotals = new Map<string, number>();
+  if (allTxRes.ok) {
+    for (const item of noteList(allTxRes.data, "Активность", [])) {
+      const record = obj(item);
+      if (!record) continue;
+      const kind = str(record.relatedEntityType).toLowerCase();
+      if (!["quest", "survey", "event", "achievement"].includes(kind)) continue;
+      const amount = num(record.amount);
+      if (amount <= 0) continue;
+      const id = str(record.userId);
+      if (!id) continue;
+      activityTotals.set(id, (activityTotals.get(id) ?? 0) + amount);
+    }
+    for (const person of people.values()) {
+      if (person.status === "active" && !activityTotals.has(person.id)) activityTotals.set(person.id, 0);
+    }
+  }
+  const leaderboardKind = allTxRes.ok ? "activity" : "thanks";
+  const leaderboard =
+    leaderboardKind === "activity"
+      ? [...activityTotals.entries()]
+          .map(([id, score]) => ({ id, name: people.get(id)?.name || "Сотрудник", score }))
+          .sort((a, b) => b.score - a.score || a.name.localeCompare(b.name, "ru"))
+      : thanksBoard;
   for (const row of leaderboard) {
     const person = people.get(row.id);
     if (person) person.score = row.score;
@@ -726,6 +777,7 @@ export async function loadWorkspace(): Promise<Workspace> {
     feed,
     roleCatalog,
     leaderboard,
+    leaderboardKind,
     departmentIds,
     rewardBalance,
     mustChangePassword: passwordChangeRequired(meRaw),
@@ -803,6 +855,7 @@ export interface AchievementView {
   description: string;
   reward: number;
   conditionType: string;
+  iconUrl: string;
   earned: boolean;
   earnedAt: string;
 }
@@ -987,6 +1040,7 @@ function mapAchievement(item: unknown, earnedAt: Map<string, string>): Achieveme
     description: str(record.description),
     reward: num(record.rewardAmount),
     conditionType: str(record.conditionType),
+    iconUrl: str(record.iconUrl || record.icon),
     earned: earnedAt.has(id),
     earnedAt: earnedAt.get(id) ?? "",
   };

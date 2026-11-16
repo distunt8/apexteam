@@ -97,17 +97,25 @@ export interface Product {
   image: string;
   popular?: boolean;
   isDigital?: boolean;
+  originalPrice?: number;
+  discountPercent?: number;
+  badges?: { name: string; color: string }[];
 }
 
 export interface CartItem {
   lineId: string;
   productId: string;
   qty: number;
+  variantId?: string;
+  variantName?: string;
+  unitPrice?: number;
+  image?: string;
 }
 
 export interface OrderItem {
   productId: string;
   title: string;
+  variantName?: string;
   price: number;
   qty: number;
 }
@@ -207,6 +215,7 @@ export interface AppState {
   categories: CategoryRow[];
   roleCatalog: RoleOption[];
   leaderboard: BoardRow[];
+  leaderboardKind: "activity" | "thanks";
   departmentIds: string[];
   rewardBalance: number | null;
   apiWarnings: string[];
@@ -241,6 +250,7 @@ const seed = (): AppState => ({
   categories: [],
   roleCatalog: [],
   leaderboard: [],
+  leaderboardKind: "thanks",
   departmentIds: [],
   rewardBalance: null,
   apiWarnings: [],
@@ -323,7 +333,7 @@ export const PEER_THANKS_AMOUNT = 25;
 
 interface Actions {
   uploadAvatar: (userId: string, file: File) => Promise<Result>;
-  uploadImage: (file: File, bucket?: "products" | "icons") => Promise<Result & { url?: string }>;
+  uploadImage: (file: File, bucket?: "products" | "icons" | "proofs") => Promise<Result & { url?: string }>;
   boot: () => Promise<void>;
   login: (email: string, password: string) => Promise<Result>;
   logout: () => void;
@@ -349,8 +359,8 @@ interface Actions {
   registerForEvent: (eventId: string) => Promise<Result>;
   cancelEventRegistration: (eventId: string) => Promise<Result>;
   claimEventReward: (eventId: string) => Promise<Result>;
-  addToCart: (productId: string) => Promise<Result>;
-  setQty: (productId: string, qty: number) => Promise<Result>;
+  addToCart: (productId: string, variantId?: string) => Promise<Result>;
+  setQty: (lineId: string, qty: number) => Promise<Result>;
   checkout: () => Promise<Result>;
   completeSteps: () => Result;
   checkIn: () => Result;
@@ -554,6 +564,7 @@ export const useStore = create<AppState & Actions>()(
           categories: [],
           roleCatalog: [],
           leaderboard: [],
+          leaderboardKind: "thanks",
           rewardBalance: null,
           apiWarnings: [],
           cart: [],
@@ -746,37 +757,43 @@ export const useStore = create<AppState & Actions>()(
         reloadActivities(set, get, () => apex(`/api/events/${eventId}/registration`, { method: "DELETE" })),
       claimEventReward: (eventId) =>
         reloadActivities(set, get, () => apex(`/api/events/${eventId}/reward`, { method: "POST" })),
-      addToCart: async (productId) => {
+      addToCart: async (productId, variantId) => {
         const state = get();
         const product = state.products.find((item) => item.id === productId);
         if (!product || !product.active) return { ok: false as const, error: "Товар недоступен" };
         if (product.stock <= 0) return { ok: false as const, error: "Нет в наличии" };
-        const existing = state.cart.find((item) => item.productId === productId);
+        const existing = state.cart.find(
+          (item) => item.productId === productId && (item.variantId || "") === (variantId || ""),
+        );
         const nextQty = (existing?.qty ?? 0) + 1;
         if (nextQty > product.stock) return { ok: false as const, error: "Больше, чем есть на складе" };
         return commit(set, async () => {
           if (existing?.lineId) {
             await apex(`/api/cart/items/${existing.lineId}`, {
               method: "PUT",
-              body: JSON.stringify({ quantity: nextQty }),
+              body: JSON.stringify({ quantity: nextQty, variantId: variantId ? Number(variantId) : null }),
             });
           } else {
             await apex("/api/cart/items", {
               method: "POST",
-              body: JSON.stringify({ productId: Number(productId), quantity: 1 }),
+              body: JSON.stringify({
+                productId: Number(productId),
+                quantity: 1,
+                variantId: variantId ? Number(variantId) : null,
+              }),
             });
           }
         });
       },
-      setQty: async (productId, qty) => {
-        const line = get().cart.find((item) => item.productId === productId);
+      setQty: async (lineId, qty) => {
+        const line = get().cart.find((item) => item.lineId === lineId);
         if (!line?.lineId) return { ok: false as const, error: "Не нашёл строку корзины на сервере" };
         return commit(set, async () => {
           if (qty <= 0) await apex(`/api/cart/items/${line.lineId}`, { method: "DELETE" });
           else {
             await apex(`/api/cart/items/${line.lineId}`, {
               method: "PUT",
-              body: JSON.stringify({ quantity: qty }),
+              body: JSON.stringify({ quantity: qty, variantId: line.variantId ? Number(line.variantId) : null }),
             });
           }
         });

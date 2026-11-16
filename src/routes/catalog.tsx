@@ -43,10 +43,10 @@ function CatalogPage() {
   }, [products, query, filter, sort]);
   const page = usePage(list, 6, `${filter}|${sort}|${query}`);
 
-  function take(product: Product) {
+  function take(product: Product, variantId?: string) {
     if (pendingId) return;
     setPendingId(product.id);
-    void addToCart(product.id).then((result) => {
+    void addToCart(product.id, variantId).then((result) => {
       setPendingId("");
       if (!result.ok) toast.error(result.error);
       else toast.success(`«${product.title}» в корзине`);
@@ -98,14 +98,29 @@ function CatalogPage() {
           {page.items.map((product) => (
             <li key={product.id} className="flex flex-col overflow-hidden rounded-xl border border-line bg-surface transition hover:-translate-y-0.5 hover:border-brand-mid">
               <button type="button" className="text-left" onClick={() => setOpened(product)}>
-                <div className="overflow-hidden bg-brand-soft">
+                <div className="relative overflow-hidden bg-brand-soft">
                   <img src={product.image} alt="" className="aspect-[4/3] w-full object-cover" />
+                  {product.badges && product.badges.length > 0 ? (
+                    <div className="absolute top-2 left-2 flex flex-wrap gap-1">
+                      {product.badges.map((badge) => (
+                        <span key={badge.name} className="rounded-full px-2 py-0.5 text-[11px] font-semibold text-white" style={{ background: badge.color }}>
+                          {badge.name}
+                        </span>
+                      ))}
+                    </div>
+                  ) : null}
+                  {product.discountPercent ? (
+                    <span className="absolute top-2 right-2 rounded-full bg-rose-600 px-2 py-0.5 text-[11px] font-semibold text-white">−{product.discountPercent}%</span>
+                  ) : null}
                 </div>
                 <div className="p-4 pb-0">
                   <p className="text-xs font-medium text-brand">{categoryLabel(product.category, product.categoryName)}</p>
                   <div className="mt-1 flex items-start justify-between gap-3">
                     <h2 className="font-bold">{product.title}</h2>
-                    <p className="shrink-0 text-sm font-bold text-brand">{formatPoints(product.price)}</p>
+                    <p className="shrink-0 text-right text-sm font-bold text-brand">
+                      {product.originalPrice ? <span className="mr-1 text-xs font-medium text-muted line-through">{formatPoints(product.originalPrice)}</span> : null}
+                      {formatPoints(product.price)}
+                    </p>
                   </div>
                   <p className="mt-1 line-clamp-2 text-sm text-muted">{product.description}</p>
                   <p className="mt-3 text-xs text-muted">{product.stock > 0 ? `В наличии: ${product.stock}` : "Нет в наличии"}</p>
@@ -127,7 +142,7 @@ function CatalogPage() {
           pending={pendingId === opened.id}
           locked={pendingId !== ""}
           onClose={() => setOpened(null)}
-          onTake={() => take(opened)}
+          onTake={(variantId) => take(opened, variantId)}
         />
       ) : null}
     </Shell>
@@ -145,7 +160,7 @@ function ProductCard({
   pending: boolean;
   locked: boolean;
   onClose: () => void;
-  onTake: () => void;
+  onTake: (variantId?: string) => void;
 }) {
   const [variants, setVariants] = useState<ProductVariant[]>([]);
   const [selectedId, setSelectedId] = useState("");
@@ -238,7 +253,7 @@ function ProductCard({
                 <dd className="font-medium">{product.isDigital ? "Цифровой" : "Физический"}</dd>
               </div>
             </dl>
-            <Button className="mt-6 w-full" disabled={stock <= 0 || locked} onClick={onTake}>
+            <Button className="mt-6 w-full" disabled={stock <= 0 || locked} onClick={() => onTake(selected?.id)}>
               {pending ? "Добавляем…" : "В корзину"}
             </Button>
           </div>

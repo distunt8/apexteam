@@ -1,0 +1,1 @@
+import{I as e,T as t}from"./dist-Bs0qyMvo.js";import{t as n}from"./award-CCgvy-mf.js";var r=e();function i({iconUrl:e,earned:i=!0,className:a}){return e?(0,r.jsx)(`img`,{src:e,alt:``,className:t(`size-8 rounded-lg object-cover`,!i&&`opacity-40`,a)}):(0,r.jsx)(n,{className:t(`size-6`,i?`text-brand`:`text-brand-soft`,a)})}export{i as t};

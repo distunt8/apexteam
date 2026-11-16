@@ -26,11 +26,11 @@ function CartPage() {
       return product ? { ...item, product } : null;
     })
     .filter((item): item is NonNullable<typeof item> => Boolean(item));
-  const total = lines.reduce((sum, line) => sum + line.product.price * line.qty, 0);
+  const total = lines.reduce((sum, line) => sum + (line.unitPrice ?? line.product.price) * line.qty, 0);
   const short = total > balance;
 
-  function change(productId: string, qty: number) {
-    void setQty(productId, qty).then((result) => {
+  function change(lineId: string, qty: number) {
+    void setQty(lineId, qty).then((result) => {
       if (!result.ok) toast.error(result.error);
     });
   }
@@ -49,26 +49,27 @@ function CartPage() {
         <div className="mt-6 grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_280px]">
           <ul className="space-y-3">
             {lines.map((line) => (
-              <li key={line.lineId || line.productId} className="flex gap-3 rounded-lg bg-card p-3">
-                <img src={line.product.image} alt="" className="size-20 rounded-md object-cover" />
+              <li key={line.lineId || `${line.productId}-${line.variantId}`} className="flex gap-3 rounded-xl border border-line bg-gradient-to-b from-surface to-card p-3 shadow-sm transition hover:shadow-md">
+                <img src={line.image || line.product.image} alt="" className="size-20 rounded-md object-cover" />
                 <div className="min-w-0 flex-1">
                   <p className="font-semibold">{line.product.title}</p>
-                  <p className="mt-1 text-sm text-muted">{formatPoints(line.product.price)}</p>
+                  {line.variantName ? <p className="text-sm text-brand">{line.variantName}</p> : null}
+                  <p className="mt-1 text-sm text-muted">{formatPoints(line.unitPrice ?? line.product.price)}</p>
                   <div className="mt-3 flex items-center gap-2">
                     <button
                       type="button"
-                      className="grid size-11 place-items-center rounded-md border border-line"
+                      className="grid size-11 place-items-center rounded-md border border-line transition hover:bg-brand-wash"
                       aria-label="Уменьшить"
-                      onClick={() => change(line.productId, line.qty - 1)}
+                      onClick={() => change(line.lineId, line.qty - 1)}
                     >
                       <Minus className="size-4" />
                     </button>
                     <span className="tabular w-6 text-center text-sm font-semibold">{line.qty}</span>
                     <button
                       type="button"
-                      className="grid size-11 place-items-center rounded-md border border-line"
+                      className="grid size-11 place-items-center rounded-md border border-line transition hover:bg-brand-wash"
                       aria-label="Увеличить"
-                      onClick={() => change(line.productId, line.qty + 1)}
+                      onClick={() => change(line.lineId, line.qty + 1)}
                     >
                       <Plus className="size-4" />
                     </button>
@@ -76,7 +77,7 @@ function CartPage() {
                       type="button"
                       className="ml-auto grid size-11 place-items-center rounded-md text-danger"
                       aria-label="Удалить"
-                      onClick={() => change(line.productId, 0)}
+                      onClick={() => change(line.lineId, 0)}
                     >
                       <Trash2 className="size-4" />
                     </button>

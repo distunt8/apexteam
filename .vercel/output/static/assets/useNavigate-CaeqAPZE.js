@@ -1,0 +1,1 @@
+import{M as e,dt as t,lt as n}from"./dist-Bs0qyMvo.js";var r=t(n(),1);function i(t){let n=e();return r.useCallback(e=>n.navigate({...e,from:e.from??t?.from}),[t?.from,n])}export{i as t};

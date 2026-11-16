@@ -1,14 +1,14 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { AvatarEditor } from "@/components/user-avatar";
-import { Gem, Star } from "lucide-react";
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { Gem, Settings } from "lucide-react";
 import { useEffect, useState } from "react";
-import { toast } from "sonner";
+import { AchievementMark } from "@/components/achievement-mark";
+import { Pager, usePage } from "@/components/pager";
 import { Shell } from "@/components/shell";
-import { Button, Field, Panel, TextInput } from "@/components/ui";
+import { Panel } from "@/components/ui";
+import { AvatarEditor } from "@/components/user-avatar";
 import { formatDateTime, formatNumber, formatPoints } from "@/lib/format";
 import { ROLE_LABEL } from "@/lib/labels";
 import { hasWorkBalance, useStore } from "@/lib/store";
-import { useTheme, type ThemeChoice } from "@/lib/theme";
 
 export const Route = createFileRoute("/profile")({ component: ProfilePage });
 
@@ -20,8 +20,8 @@ function ProfilePage() {
   const achievements = useStore((state) => state.activitiesCatalog.achievements);
   const achievementsStatus = useStore((state) => state.activitiesCatalog.status);
   const loadActivities = useStore((state) => state.loadActivities);
+  const kind = useStore((state) => state.leaderboardKind);
   const [tab, setTab] = useState<"thanks" | "badges">("thanks");
-  const [passwordOpen, setPasswordOpen] = useState(false);
   useEffect(() => {
     void loadActivities();
   }, [loadActivities]);
@@ -32,7 +32,13 @@ function ProfilePage() {
 
   return (
     <Shell mode="shop">
-      <h1 className="text-3xl font-bold tracking-tight">Профиль</h1>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <h1 className="text-3xl font-bold tracking-tight">Профиль</h1>
+        <Link to="/settings" className="inline-flex min-h-11 items-center gap-2 rounded-md px-3 text-sm font-semibold text-brand hover:bg-brand-wash">
+          <Settings className="size-4" />
+          Настройки
+        </Link>
+      </div>
       <div className="mt-5 flex flex-wrap items-center gap-4">
         <AvatarEditor user={user} />
         <div className="min-w-0">
@@ -44,9 +50,7 @@ function ProfilePage() {
         </div>
       </div>
 
-      <ThemeSwitch />
-
-      <Panel className="mt-5">
+      <Panel className="mt-5 bg-gradient-to-br from-brand-wash via-surface to-card">
         <p className="text-sm text-muted">Текущий баланс</p>
         <p className="mt-1 text-4xl font-bold text-brand">{formatPoints(user.balance)}</p>
         {hasWorkBalance(user.role) ? (
@@ -55,13 +59,10 @@ function ProfilePage() {
             <span className="font-semibold">{reward == null ? "нет доступа" : formatNumber(reward)}</span>
           </p>
         ) : null}
-        <p className="mt-1 text-sm text-muted">В рейтинге: {formatNumber(user.score)} благодарностей</p>
+        <p className="mt-1 text-sm text-muted">
+          {kind === "activity" ? "Апексы за активности" : "В рейтинге благодарностей"}: {formatNumber(user.score)}
+        </p>
       </Panel>
-
-      <Button variant="line" className="mt-4" onClick={() => setPasswordOpen((value) => !value)}>
-        {passwordOpen ? "Скрыть смену пароля" : "Сменить пароль"}
-      </Button>
-      {passwordOpen ? <PasswordCard /> : null}
 
       <div className="mt-5 flex flex-wrap gap-2" role="tablist">
         {(
@@ -74,7 +75,7 @@ function ProfilePage() {
             key={id}
             type="button"
             onClick={() => setTab(id)}
-            className={`min-h-11 rounded-md px-3 text-sm font-semibold ${
+            className={`min-h-11 rounded-md px-3 text-sm font-semibold transition hover:-translate-y-0.5 ${
               tab === id ? "bg-brand text-white" : "bg-card text-ink"
             }`}
           >
@@ -99,12 +100,10 @@ function ProfilePage() {
             <li className="text-sm text-muted">Достижений пока нет.</li>
           ) : null}
           {achievements.map((badge) => (
-            <li key={badge.id} className="rounded-lg bg-card p-4">
-              <Star className={`size-6 ${badge.earned ? "fill-brand text-brand" : "text-brand-soft"}`} />
+            <li key={badge.id} className="rounded-xl bg-card p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
+              <AchievementMark iconUrl={badge.iconUrl} earned={badge.earned} />
               <p className="mt-3 font-semibold">{badge.name}</p>
-              <p className="mt-1 text-xs text-muted">
-                {badge.earned ? "Открыто" : badge.description}
-              </p>
+              <p className="mt-1 text-xs text-muted">{badge.earned ? "Открыто" : badge.description}</p>
             </li>
           ))}
         </ul>
@@ -126,17 +125,18 @@ function ThanksBlock({
   people: { id: string; name: string }[];
   side: "from" | "to";
 }) {
+  const page = usePage(items, 5, title);
   return (
     <section>
       <h2 className="text-lg font-bold">{title}</h2>
       {items.length === 0 ? <p className="mt-3 text-sm text-muted">{empty}</p> : null}
       <ul className="mt-3 space-y-2">
-        {items.map((item) => {
+        {page.items.map((item) => {
           const personId = side === "from" ? item.fromId : item.toId;
           const person = people.find((entry) => entry.id === personId);
           const name = person?.name || (side === "from" ? item.fromName : item.toName) || "Коллега";
           return (
-            <li key={item.id} className="flex items-center justify-between gap-3 rounded-lg bg-card px-4 py-3">
+            <li key={item.id} className="flex items-center justify-between gap-3 rounded-xl bg-card px-4 py-3 shadow-sm transition hover:bg-brand-wash">
               <div className="min-w-0">
                 <p className="truncate text-sm font-medium">{name}</p>
                 {item.message ? <p className="mt-1 text-sm">{item.message}</p> : null}
@@ -155,90 +155,7 @@ function ThanksBlock({
           );
         })}
       </ul>
+      <Pager page={page.page} pages={page.pages} total={page.total} onPage={page.setPage} />
     </section>
-  );
-}
-
-function ThemeSwitch() {
-  const { choice, setChoice } = useTheme();
-  const options: { id: ThemeChoice; label: string }[] = [
-    { id: "system", label: "Как в системе" },
-    { id: "light", label: "Светлая" },
-    { id: "dark", label: "Тёмная" },
-  ];
-  return (
-    <div className="mt-5">
-      <p className="text-sm font-medium">Тема</p>
-      <div className="mt-2 flex flex-wrap gap-2">
-        {options.map((option) => (
-          <button
-            key={option.id}
-            type="button"
-            onClick={() => setChoice(option.id)}
-            className={`min-h-11 rounded-md px-3 text-sm font-semibold ${
-              choice === option.id ? "bg-brand text-white" : "bg-card text-ink"
-            }`}
-          >
-            {option.label}
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function PasswordCard() {
-  const changePassword = useStore((state) => state.changePassword);
-  const [current, setCurrent] = useState("");
-  const [password, setPassword] = useState("");
-  const [again, setAgain] = useState("");
-  const [pending, setPending] = useState(false);
-
-  return (
-    <Panel className="mt-4">
-      <h2 className="text-lg font-bold">Пароль</h2>
-      <form
-        className="mt-3 grid gap-3 sm:grid-cols-2"
-        onSubmit={(event) => {
-          event.preventDefault();
-          if (password.length < 6) {
-            toast.error("Пароль должен быть не короче 6 символов");
-            return;
-          }
-          if (password === current) {
-            toast.error("Новый пароль совпадает с текущим");
-            return;
-          }
-          if (password !== again) {
-            toast.error("Пароли не совпадают");
-            return;
-          }
-          setPending(true);
-          void changePassword(password, current).then((result) => {
-            setPending(false);
-            if (!result.ok) toast.error(result.error);
-            else {
-              toast.success("Пароль изменён");
-              setCurrent("");
-              setPassword("");
-              setAgain("");
-            }
-          });
-        }}
-      >
-        <Field label="Текущий пароль">
-          <TextInput type="password" autoComplete="current-password" value={current} onChange={(event) => setCurrent(event.target.value)} required />
-        </Field>
-        <Field label="Новый пароль">
-          <TextInput type="password" autoComplete="new-password" minLength={6} value={password} onChange={(event) => setPassword(event.target.value)} required />
-        </Field>
-        <Field label="Ещё раз">
-          <TextInput type="password" autoComplete="new-password" value={again} onChange={(event) => setAgain(event.target.value)} />
-        </Field>
-        <Button type="submit" disabled={pending} className="sm:col-span-2 sm:w-auto">
-          Сменить пароль
-        </Button>
-      </form>
-    </Panel>
   );
 }

@@ -3,16 +3,18 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Pager, usePage } from "@/components/pager";
+import { NewsDesk, ProductTools } from "@/components/product-tools";
 import { UserAvatar } from "@/components/user-avatar";
 import { Shell } from "@/components/shell";
 import { Button, Field, TextArea, TextInput } from "@/components/ui";
 import { formatNumber } from "@/lib/format";
-import { categoryLabel, ORDER_FLOW, orderStatusLabel, roleCodeLabel, TICKET_STATUS } from "@/lib/labels";
+import { categoryLabel, ENTRY_LABEL, ORDER_FLOW, orderStatusLabel, ROLE_LABEL, roleCodeLabel, TICKET_STATUS } from "@/lib/labels";
 import {
   canManageActivities,
   canManageShop,
   canOpenAdmin,
   useStore,
+  type EntryType,
   type Product,
   type Role,
   type TicketStatus,
@@ -20,7 +22,7 @@ import {
 
 export const Route = createFileRoute("/admin")({ component: AdminPage });
 
-const TABS = ["Товары", "Заказы", "Сотрудники", "Активности", "Экономика", "Обращения"] as const;
+const TABS = ["Товары", "Заказы", "Сотрудники", "Активности", "Экономика", "Обращения", "Лента"] as const;
 type AdminTab = (typeof TABS)[number];
 
 function tabsFor(role: Role): AdminTab[] {
@@ -28,7 +30,8 @@ function tabsFor(role: Role): AdminTab[] {
   if (role === "merchandiser") return ["Товары", "Заказы"];
   if (role === "support") return ["Обращения"];
   if (role === "manager") return ["Сотрудники"];
-  return [...TABS];
+  if (role === "admin" || role === "chief") return [...TABS];
+  return TABS.filter((item) => item !== "Лента");
 }
 
 function AdminPage() {
@@ -88,9 +91,17 @@ function AdminPage() {
         {current === "Активности" ? <Activities /> : null}
         {current === "Экономика" ? <Economy /> : null}
         {current === "Обращения" ? <Tickets /> : null}
+        {current === "Лента" ? <NewsDesk /> : null}
       </div>
     </Shell>
   );
+}
+
+function orderTone(status: string) {
+  if (status === "cancelled") return "bg-rose-100 text-rose-800";
+  if (status === "ready") return "bg-emerald-100 text-emerald-800";
+  if (status === "processing") return "bg-amber-100 text-amber-950";
+  return "bg-sky-100 text-sky-900";
 }
 
 function emptyProduct(): Product {
@@ -114,41 +125,52 @@ function Products() {
   const [draft, setDraft] = useState<Product | null>(null);
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
-  const page = usePage(products, 8);
+  const [query, setQuery] = useState("");
+  const [onlyActive, setOnlyActive] = useState<"all" | "yes" | "no">("all");
+  const [categoryId, setCategoryId] = useState("all");
+  const filtered = products.filter((product) => {
+    const needle = query.trim().toLowerCase();
+    const text = `${product.title} ${product.categoryName ?? ""} ${categoryLabel(product.category, product.categoryName)}`.toLowerCase();
+    if (needle && !text.includes(needle)) return false;
+    if (onlyActive === "yes" && !product.active) return false;
+    if (onlyActive === "no" && product.active) return false;
+    if (categoryId !== "all" && product.category !== categoryId) return false;
+    return true;
+  });
+  const page = usePage(filtered, 8, `${query}|${onlyActive}|${categoryId}`);
 
   return (
     <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
       <div>
-      <div className="overflow-x-auto rounded-lg border border-line">
-        <table className="w-full min-w-[640px] text-left text-sm">
-          <thead className="bg-card text-xs text-muted">
-            <tr>
-              <th className="px-3 py-2 font-medium">Название</th>
-              <th className="px-3 py-2 font-medium">Категория</th>
-              <th className="px-3 py-2 font-medium">Цена</th>
-              <th className="px-3 py-2 font-medium">Остаток</th>
-              <th className="px-3 py-2 font-medium">Статус</th>
-              <th className="px-3 py-2" />
-            </tr>
-          </thead>
-          <tbody>
-            {page.items.map((product) => (
-              <tr key={product.id} className="border-t border-line">
-                <td className="px-3 py-2">{product.title}</td>
-                <td className="px-3 py-2">{categoryLabel(product.category, product.categoryName)}</td>
-                <td className="px-3 py-2 tabular">{formatNumber(product.price)}</td>
-                <td className="px-3 py-2 tabular">{product.stock}</td>
-                <td className="px-3 py-2">{product.active ? "В каталоге" : "Скрыт"}</td>
-                <td className="px-3 py-2 text-right">
-                  <button type="button" className="font-semibold text-brand" onClick={() => setDraft(product)}>
-                    Изменить
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <div className="mb-3 flex flex-wrap gap-2">
+        <TextInput value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Поиск товара" aria-label="Поиск товара" className="max-w-xs" />
+        <select className="h-11 rounded-md border border-line bg-surface px-3 text-sm" value={onlyActive} onChange={(event) => setOnlyActive(event.target.value as "all" | "yes" | "no")}>
+          <option value="all">Все статусы</option>
+          <option value="yes">В каталоге</option>
+          <option value="no">Скрытые</option>
+        </select>
+        <select className="h-11 rounded-md border border-line bg-surface px-3 text-sm" value={categoryId} onChange={(event) => setCategoryId(event.target.value)} aria-label="Категория товара">
+          <option value="all">Все категории</option>
+          {categories.map((category) => (
+            <option key={category.id} value={category.id}>{category.name}</option>
+          ))}
+        </select>
       </div>
+      <ul className="grid gap-3 sm:grid-cols-2">
+        {page.items.map((product) => (
+          <li key={product.id}>
+            <button type="button" onClick={() => setDraft(product)} className="flex w-full gap-3 rounded-xl border border-line bg-gradient-to-b from-surface to-card p-3 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-brand-mid hover:shadow-md">
+              <img src={product.image} alt="" className="size-16 rounded-lg object-cover" />
+              <span className="min-w-0">
+                <span className="block font-semibold">{product.title}</span>
+                <span className="mt-1 block text-xs text-muted">{categoryLabel(product.category, product.categoryName)}</span>
+                <span className="mt-1 block text-sm">{formatNumber(product.price)} апексов · {product.stock} шт.</span>
+                <span className={`mt-1 inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${product.active ? "bg-emerald-100 text-emerald-800" : "bg-card text-muted"}`}>{product.active ? "В каталоге" : "Скрыт"}</span>
+              </span>
+            </button>
+          </li>
+        ))}
+      </ul>
       <Pager page={page.page} pages={page.pages} total={page.total} onPage={page.setPage} />
       </div>
       <form
@@ -254,6 +276,7 @@ function Products() {
             <Button type="submit" className="w-full" disabled={saving || uploading}>
               {saving ? "Сохраняем…" : "Сохранить"}
             </Button>
+            {draft.id !== "new" ? <ProductTools productId={draft.id} /> : null}
           </>
         ) : (
           <p className="text-sm text-muted">Выберите товар или создайте новый.</p>
@@ -266,10 +289,25 @@ function Products() {
 function Orders() {
   const orders = useStore((state) => state.allOrders);
   const people = useStore((state) => state.people);
-  const setStatus = useStore((state) => state.setOrderStatus);
+  const updateOrderStatus = useStore((state) => state.setOrderStatus);
   const loadAllOrders = useStore((state) => state.loadAllOrders);
   const [error, setError] = useState("");
-  const page = usePage(orders, 8);
+  const [query, setQuery] = useState("");
+  const [status, setStatus] = useState("all");
+  const [period, setPeriod] = useState("all");
+  const filtered = orders.filter((order) => {
+    const person = people.find((item) => item.id === order.userId);
+    const text = `${person?.name ?? ""} ${order.items.map((item) => `${item.title} ${item.variantName ?? ""}`).join(" ")}`.toLowerCase();
+    if (query.trim() && !text.includes(query.trim().toLowerCase())) return false;
+    if (status !== "all" && order.status !== status) return false;
+    if (period !== "all") {
+      const age = Date.now() - new Date(order.createdAt).getTime();
+      const limit = period === "1" ? 86400000 : period === "7" ? 7 * 86400000 : 30 * 86400000;
+      if (!Number.isFinite(age) || age > limit) return false;
+    }
+    return true;
+  });
+  const page = usePage(filtered, 8, `${query}|${status}|${period}`);
   useEffect(() => {
     void loadAllOrders().catch((reason: unknown) => {
       setError(reason instanceof Error ? reason.message : "Не удалось загрузить заказы");
@@ -279,30 +317,45 @@ function Orders() {
     <div>
       {error ? <p className="mb-3 text-sm text-danger">{error}</p> : null}
       {orders.length === 0 && !error ? <p className="mb-3 text-sm text-muted">Заказов пока нет.</p> : null}
-      <div className="overflow-x-auto rounded-lg border border-line">
-      <table className="w-full min-w-[720px] text-left text-sm">
-        <thead className="bg-card text-xs text-muted">
-          <tr>
-            <th className="px-3 py-2 font-medium">Заказ</th>
-            <th className="px-3 py-2 font-medium">Сотрудник</th>
-            <th className="px-3 py-2 font-medium">Состав</th>
-            <th className="px-3 py-2 font-medium">Сумма</th>
-            <th className="px-3 py-2 font-medium">Статус</th>
-          </tr>
-        </thead>
-        <tbody>
-          {page.items.map((order) => (
-            <tr key={order.id} className="border-t border-line">
-              <td className="px-3 py-2">{order.id}</td>
-              <td className="px-3 py-2">{people.find((person) => person.id === order.userId)?.name ?? "Сотрудник"}</td>
-              <td className="px-3 py-2">{order.items.map((item) => `${item.title} ×${item.qty}`).join(", ")}</td>
-              <td className="px-3 py-2 tabular">{formatNumber(order.total)}</td>
-              <td className="px-3 py-2">
+      <div className="mb-3 flex flex-wrap gap-2">
+        <TextInput value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Сотрудник или товар" aria-label="Поиск заказа" className="max-w-xs" />
+        <select className="h-11 rounded-md border border-line bg-surface px-3 text-sm" value={status} onChange={(event) => setStatus(event.target.value)}>
+          <option value="all">Все статусы</option>
+          {ORDER_FLOW.map((item) => (
+            <option key={item} value={item}>{orderStatusLabel(item)}</option>
+          ))}
+        </select>
+        <select className="h-11 rounded-md border border-line bg-surface px-3 text-sm" value={period} onChange={(event) => setPeriod(event.target.value)} aria-label="Период заказов">
+          <option value="all">За всё время</option>
+          <option value="1">Сегодня</option>
+          <option value="7">7 дней</option>
+          <option value="30">30 дней</option>
+        </select>
+      </div>
+      <ul className="space-y-3">
+        {page.items.map((order) => {
+          const person = people.find((item) => item.id === order.userId);
+          return (
+            <li key={order.id} className="rounded-xl border border-line bg-gradient-to-b from-surface to-card p-4 shadow-sm">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                {person ? (
+                  <Link to="/people/$userId" params={{ userId: person.id }} className="flex items-center gap-2 font-semibold hover:text-brand">
+                    <UserAvatar user={person} className="size-9" />
+                    {person.name}
+                  </Link>
+                ) : (
+                  <span>Сотрудник</span>
+                )}
+                <span className={`rounded-full px-2 py-1 text-xs font-semibold ${orderTone(order.status)}`}>{orderStatusLabel(order.status)}</span>
+              </div>
+              <p className="mt-2 text-sm">{order.items.map((item) => `${item.title}${item.variantName ? ` (${item.variantName})` : ""} ×${item.qty}`).join(", ")}</p>
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+                <p className="text-sm font-semibold tabular">{formatNumber(order.total)} апексов</p>
                 <select
                   className="h-10 rounded-md border border-line bg-surface px-2"
                   value={order.status}
                   onChange={(event) => {
-                    void setStatus(order.id, event.target.value).then((result) => {
+                    void updateOrderStatus(order.id, event.target.value).then((result) => {
                       if (!result.ok) toast.error(result.error);
                       else toast.success(event.target.value === "cancelled" ? "Заказ отменён, апексы вернулись на баланс" : "Статус заказа обновлён");
                     });
@@ -311,18 +364,15 @@ function Orders() {
                   {!ORDER_FLOW.includes(order.status as (typeof ORDER_FLOW)[number]) ? (
                     <option value={order.status}>{orderStatusLabel(order.status)}</option>
                   ) : null}
-                  {ORDER_FLOW.map((status) => (
-                    <option key={status} value={status}>
-                      {orderStatusLabel(status)}
-                    </option>
+                  {ORDER_FLOW.map((item) => (
+                    <option key={item} value={item}>{orderStatusLabel(item)}</option>
                   ))}
                 </select>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      </div>
+              </div>
+            </li>
+          );
+        })}
+      </ul>
       <Pager page={page.page} pages={page.pages} total={page.total} onPage={page.setPage} />
     </div>
   );
@@ -332,8 +382,15 @@ function People() {
   const people = useStore((state) => state.people);
   const me = useStore((state) => state.people.find((person) => person.id === state.currentUserId));
   const departmentIds = useStore((state) => state.departmentIds);
-  const visible = me?.role === "manager" ? people.filter((person) => departmentIds.includes(person.id)) : people;
-  const peoplePage = usePage(visible, 8);
+  const [peopleQuery, setPeopleQuery] = useState("");
+  const [roleFilter, setRoleFilter] = useState("all");
+  const visible = (me?.role === "manager" ? people.filter((person) => departmentIds.includes(person.id)) : people).filter((person) => {
+    const needle = peopleQuery.trim().toLowerCase();
+    if (roleFilter !== "all" && person.role !== roleFilter) return false;
+    if (!needle) return true;
+    return `${person.name} ${person.department} ${person.position}`.toLowerCase().includes(needle);
+  });
+  const peoplePage = usePage(visible, 8, `${peopleQuery}|${roleFilter}`);
   const roles = useStore((state) => state.roleCatalog);
   const setRole = useStore((state) => state.setUserRole);
   const setStatus = useStore((state) => state.setUserStatus);
@@ -445,6 +502,15 @@ function People() {
           </div>
         </form>
       ) : null}
+      <div className="mb-3 flex flex-wrap gap-2">
+        <TextInput value={peopleQuery} onChange={(event) => setPeopleQuery(event.target.value)} placeholder="Поиск сотрудника" aria-label="Поиск сотрудника" className="max-w-xs" />
+        <select className="h-11 rounded-md border border-line bg-surface px-3 text-sm" value={roleFilter} onChange={(event) => setRoleFilter(event.target.value)} aria-label="Роль">
+          <option value="all">Все роли</option>
+          {(Object.keys(ROLE_LABEL) as Role[]).map((role) => (
+            <option key={role} value={role}>{ROLE_LABEL[role]}</option>
+          ))}
+        </select>
+      </div>
       <div className="overflow-x-auto rounded-lg border border-line">
         <table className="w-full min-w-[760px] text-left text-sm">
           <thead className="bg-card text-xs text-muted">
@@ -556,7 +622,16 @@ function Economy() {
   const [balanceType, setBalanceType] = useState<"Personal" | "Reward">("Personal");
   const [error, setError] = useState("");
   const [adjusting, setAdjusting] = useState(false);
-  const ledgerPage = usePage(ledger, 8);
+  const [ledgerQuery, setLedgerQuery] = useState("");
+  const [ledgerType, setLedgerType] = useState<"all" | EntryType>("all");
+  const sorted = [...ledger]
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+    .filter((entry) => {
+      if (ledgerType !== "all" && entry.type !== ledgerType) return false;
+      const name = people.find((person) => person.id === entry.userId)?.name ?? "";
+      return `${name} ${entry.reason}`.toLowerCase().includes(ledgerQuery.trim().toLowerCase());
+    });
+  const ledgerPage = usePage(sorted, 8, `${ledgerQuery}|${ledgerType}`);
   useEffect(() => {
     void loadAllLedger().catch((reason: unknown) => {
       setError(reason instanceof Error ? reason.message : "Не удалось загрузить транзакции");
@@ -617,6 +692,15 @@ function Economy() {
       </form>
       <div>
         {error ? <p className="mb-3 text-sm text-danger">{error}</p> : null}
+        <div className="mb-3 flex flex-wrap gap-2">
+          <TextInput value={ledgerQuery} onChange={(event) => setLedgerQuery(event.target.value)} placeholder="Поиск по сотруднику или причине" aria-label="Поиск транзакций" className="max-w-sm" />
+          <select className="h-11 rounded-md border border-line bg-surface px-3 text-sm" value={ledgerType} onChange={(event) => setLedgerType(event.target.value as "all" | EntryType)} aria-label="Тип операции">
+            <option value="all">Все операции</option>
+            {(Object.keys(ENTRY_LABEL) as EntryType[]).map((type) => (
+              <option key={type} value={type}>{ENTRY_LABEL[type]}</option>
+            ))}
+          </select>
+        </div>
         <ul className="divide-y divide-line rounded-lg border border-line">
           {ledger.length === 0 ? <li className="px-3 py-3 text-sm text-muted">Транзакций пока нет.</li> : null}
           {ledgerPage.items.map((entry) => (
@@ -645,13 +729,28 @@ function Tickets() {
   const loadTickets = useStore((state) => state.loadTickets);
   const setStatus = useStore((state) => state.setTicketStatus);
   const assignTicket = useStore((state) => state.assignTicket);
-  const ticketPage = usePage(tickets, 8);
+  const [ticketQuery, setTicketQuery] = useState("");
+  const [ticketStatus, setTicketStatus] = useState<"all" | TicketStatus>("all");
+  const filteredTickets = tickets.filter((ticket) => {
+    if (ticketStatus !== "all" && ticket.status !== ticketStatus) return false;
+    return `${ticket.subject ?? ""} ${ticket.id} ${ticket.userName ?? ""}`.toLowerCase().includes(ticketQuery.trim().toLowerCase());
+  });
+  const ticketPage = usePage(filteredTickets, 8, `${ticketQuery}|${ticketStatus}`);
   useEffect(() => {
     void loadTickets();
   }, [loadTickets]);
   return (
     <div>
       <p className="mb-3 text-sm text-muted">Ответ пишется в карточке обращения.</p>
+      <div className="mb-3 flex flex-wrap gap-2">
+        <TextInput value={ticketQuery} onChange={(event) => setTicketQuery(event.target.value)} placeholder="Поиск обращения" aria-label="Поиск обращения" className="max-w-xs" />
+        <select className="h-11 rounded-md border border-line bg-surface px-3 text-sm" value={ticketStatus} onChange={(event) => setTicketStatus(event.target.value as "all" | TicketStatus)} aria-label="Статус обращения">
+          <option value="all">Все статусы</option>
+          {(Object.keys(TICKET_STATUS) as TicketStatus[]).map((status) => (
+            <option key={status} value={status}>{TICKET_STATUS[status]}</option>
+          ))}
+        </select>
+      </div>
       {ticketsError ? <p className="mb-3 text-sm text-danger">{ticketsError}</p> : null}
       {tickets.length === 0 && !ticketsError ? <p className="text-sm text-muted">Обращений пока нет.</p> : null}
       <ul className="space-y-2">

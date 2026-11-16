@@ -27,15 +27,16 @@ function OrdersPage() {
               <Panel>
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <h2 className="font-bold">{formatDateTime(order.createdAt)}</h2>
-                  <span className="rounded-full bg-brand-wash px-3 py-1 text-xs font-semibold text-brand-deep">
+                  <span className={`rounded-full px-3 py-1 text-xs font-semibold ${statusTone(order.status)}`}>
                     {orderStatusLabel(order.status)}
                   </span>
                 </div>
                 <ul className="mt-3 space-y-1 text-sm">
-                  {order.items.map((item) => (
-                    <li key={item.productId} className="flex justify-between gap-3">
+                  {order.items.map((item, index) => (
+                    <li key={`${item.productId}-${item.variantName}-${index}`} className="flex justify-between gap-3">
                       <span>
-                        {item.title} × {item.qty}
+                        {item.title}
+                        {item.variantName ? <span className="text-brand"> · {item.variantName}</span> : null} × {item.qty}
                       </span>
                       <span className="tabular text-muted">{formatPoints(item.price * item.qty)}</span>
                     </li>
@@ -50,4 +51,11 @@ function OrdersPage() {
       <Pager page={page.page} pages={page.pages} total={page.total} onPage={page.setPage} />
     </Shell>
   );
+}
+
+function statusTone(status: string) {
+  if (status === "cancelled") return "bg-red-100 text-red-800";
+  if (status === "issued" || status === "completed") return "bg-emerald-100 text-emerald-800";
+  if (status === "processing" || status === "ready") return "bg-amber-100 text-amber-900";
+  return "bg-brand-wash text-brand-deep";
 }

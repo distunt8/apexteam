@@ -17,10 +17,13 @@ import { Route as CatalogRouteImport } from './routes/catalog'
 import { Route as ColleaguesRouteImport } from './routes/colleagues'
 import { Route as HistoryRouteImport } from './routes/history'
 import { Route as MyActivityRouteImport } from './routes/my-activity'
+import { Route as NotificationsRouteImport } from './routes/notifications'
 import { Route as OrdersRouteImport } from './routes/orders'
 import { Route as ProfileRouteImport } from './routes/profile'
+import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as SupportRouteImport } from './routes/support'
 import { Route as PeopleUserIdRouteImport } from './routes/people.$userId'
+import { Route as SurveysSurveyIdRouteImport } from './routes/surveys.$surveyId'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -62,6 +65,11 @@ const MyActivityRoute = MyActivityRouteImport.update({
   path: '/my-activity',
   getParentRoute: () => rootRouteImport,
 } as any)
+const NotificationsRoute = NotificationsRouteImport.update({
+  id: '/notifications',
+  path: '/notifications',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const OrdersRoute = OrdersRouteImport.update({
   id: '/orders',
   path: '/orders',
@@ -70,6 +78,11 @@ const OrdersRoute = OrdersRouteImport.update({
 const ProfileRoute = ProfileRouteImport.update({
   id: '/profile',
   path: '/profile',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SettingsRoute = SettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SupportRoute = SupportRouteImport.update({
@@ -82,6 +95,11 @@ const PeopleUserIdRoute = PeopleUserIdRouteImport.update({
   path: '/people/$userId',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SurveysSurveyIdRoute = SurveysSurveyIdRouteImport.update({
+  id: '/surveys/$surveyId',
+  path: '/surveys/$surveyId',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -92,10 +110,13 @@ export interface FileRoutesByFullPath {
   '/colleagues': typeof ColleaguesRoute
   '/history': typeof HistoryRoute
   '/my-activity': typeof MyActivityRoute
+  '/notifications': typeof NotificationsRoute
   '/orders': typeof OrdersRoute
   '/profile': typeof ProfileRoute
+  '/settings': typeof SettingsRoute
   '/support': typeof SupportRoute
   '/people/$userId': typeof PeopleUserIdRoute
+  '/surveys/$surveyId': typeof SurveysSurveyIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -106,10 +127,13 @@ export interface FileRoutesByTo {
   '/colleagues': typeof ColleaguesRoute
   '/history': typeof HistoryRoute
   '/my-activity': typeof MyActivityRoute
+  '/notifications': typeof NotificationsRoute
   '/orders': typeof OrdersRoute
   '/profile': typeof ProfileRoute
+  '/settings': typeof SettingsRoute
   '/support': typeof SupportRoute
   '/people/$userId': typeof PeopleUserIdRoute
+  '/surveys/$surveyId': typeof SurveysSurveyIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -121,10 +145,13 @@ export interface FileRoutesById {
   '/colleagues': typeof ColleaguesRoute
   '/history': typeof HistoryRoute
   '/my-activity': typeof MyActivityRoute
+  '/notifications': typeof NotificationsRoute
   '/orders': typeof OrdersRoute
   '/profile': typeof ProfileRoute
+  '/settings': typeof SettingsRoute
   '/support': typeof SupportRoute
   '/people/$userId': typeof PeopleUserIdRoute
+  '/surveys/$surveyId': typeof SurveysSurveyIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -137,10 +164,13 @@ export interface FileRouteTypes {
     | '/colleagues'
     | '/history'
     | '/my-activity'
+    | '/notifications'
     | '/orders'
     | '/profile'
+    | '/settings'
     | '/support'
     | '/people/$userId'
+    | '/surveys/$surveyId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -151,10 +181,13 @@ export interface FileRouteTypes {
     | '/colleagues'
     | '/history'
     | '/my-activity'
+    | '/notifications'
     | '/orders'
     | '/profile'
+    | '/settings'
     | '/support'
     | '/people/$userId'
+    | '/surveys/$surveyId'
   id:
     | '__root__'
     | '/'
@@ -165,10 +198,13 @@ export interface FileRouteTypes {
     | '/colleagues'
     | '/history'
     | '/my-activity'
+    | '/notifications'
     | '/orders'
     | '/profile'
+    | '/settings'
     | '/support'
     | '/people/$userId'
+    | '/surveys/$surveyId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -180,10 +216,13 @@ export interface RootRouteChildren {
   ColleaguesRoute: typeof ColleaguesRoute
   HistoryRoute: typeof HistoryRoute
   MyActivityRoute: typeof MyActivityRoute
+  NotificationsRoute: typeof NotificationsRoute
   OrdersRoute: typeof OrdersRoute
   ProfileRoute: typeof ProfileRoute
+  SettingsRoute: typeof SettingsRoute
   SupportRoute: typeof SupportRoute
   PeopleUserIdRoute: typeof PeopleUserIdRoute
+  SurveysSurveyIdRoute: typeof SurveysSurveyIdRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -244,6 +283,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof MyActivityRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/notifications': {
+      id: '/notifications'
+      path: '/notifications'
+      fullPath: '/notifications'
+      preLoaderRoute: typeof NotificationsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/orders': {
       id: '/orders'
       path: '/orders'
@@ -256,6 +302,13 @@ declare module '@tanstack/react-router' {
       path: '/profile'
       fullPath: '/profile'
       preLoaderRoute: typeof ProfileRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/settings': {
+      id: '/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof SettingsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/support': {
@@ -272,6 +325,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PeopleUserIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/surveys/$surveyId': {
+      id: '/surveys/$surveyId'
+      path: '/surveys/$surveyId'
+      fullPath: '/surveys/$surveyId'
+      preLoaderRoute: typeof SurveysSurveyIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -284,10 +344,13 @@ const rootRouteChildren: RootRouteChildren = {
   ColleaguesRoute: ColleaguesRoute,
   HistoryRoute: HistoryRoute,
   MyActivityRoute: MyActivityRoute,
+  NotificationsRoute: NotificationsRoute,
   OrdersRoute: OrdersRoute,
   ProfileRoute: ProfileRoute,
+  SettingsRoute: SettingsRoute,
   SupportRoute: SupportRoute,
   PeopleUserIdRoute: PeopleUserIdRoute,
+  SurveysSurveyIdRoute: SurveysSurveyIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

@@ -1,14 +1,25 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { Search } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { toast } from "sonner";
+import { AchievementMark } from "@/components/achievement-mark";
 import { Shell } from "@/components/shell";
 import { Button, Chip, TextArea, TextInput } from "@/components/ui";
 import type { AchievementView, EventView, QuestStepView, QuestView, SurveyQuestionView, SurveyView } from "@/lib/apex";
 import { formatDateTime, formatPoints } from "@/lib/format";
 import { useStore } from "@/lib/store";
 
-export const Route = createFileRoute("/activities")({ component: ActivitiesPage });
+export const Route = createFileRoute("/activities")({
+  validateSearch: (search: Record<string, unknown>): { kind?: Filter; focus?: string } => {
+    const allowed: Filter[] = ["all", "quest", "survey", "event", "achievement"];
+    const kind = search.kind;
+    return {
+      kind: typeof kind === "string" && allowed.includes(kind as Filter) ? (kind as Filter) : undefined,
+      focus: typeof search.focus === "string" ? search.focus : undefined,
+    };
+  },
+  component: ActivitiesPage,
+});
 
 type Filter = "all" | "quest" | "survey" | "event" | "achievement";
 
@@ -23,12 +34,20 @@ const FILTERS: { id: Filter; label: string }[] = [
 function ActivitiesPage() {
   const catalog = useStore((state) => state.activitiesCatalog);
   const load = useStore((state) => state.loadActivities);
+  const search = Route.useSearch();
   const [query, setQuery] = useState("");
-  const [filter, setFilter] = useState<Filter>("all");
+  const [filter, setFilter] = useState<Filter>(search.kind ?? "all");
 
   useEffect(() => {
     void load();
   }, [load]);
+  useEffect(() => {
+    if (search.kind) setFilter(search.kind);
+  }, [search.kind]);
+  useEffect(() => {
+    if (!search.focus) return;
+    document.getElementById(search.focus)?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [search.focus, catalog.status]);
 
   const needle = query.trim().toLowerCase();
   const quests = useMemo(
@@ -113,21 +132,30 @@ function matches(needle: string, ...parts: string[]) {
   return parts.join(" ").toLowerCase().includes(needle);
 }
 
+function tone(kind: string) {
+  if (kind === "Квест") return "bg-sky-100 text-sky-900";
+  if (kind === "Опрос") return "bg-amber-100 text-amber-950";
+  if (kind === "Мероприятие") return "bg-emerald-100 text-emerald-900";
+  return "bg-violet-100 text-violet-900";
+}
+
 function Card({
   kind,
   title,
   done,
+  id,
   children,
 }: {
   kind: string;
   title: string;
   done?: boolean;
+  id?: string;
   children: ReactNode;
 }) {
   return (
-    <article className="rounded-lg bg-card p-4">
+    <article id={id} className="rounded-xl border border-line bg-gradient-to-b from-surface to-card p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
       <div className="flex flex-wrap items-center gap-2">
-        <span className="rounded-full bg-brand-wash px-2 py-0.5 text-xs font-semibold text-brand-deep">{kind}</span>
+        <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${tone(kind)}`}>{kind}</span>
         {done ? <span className="text-xs font-semibold text-brand">получено</span> : null}
       </div>
       <h2 className="mt-2 text-lg font-bold">{title}</h2>
@@ -155,7 +183,7 @@ function QuestCard({ quest }: { quest: QuestView }) {
   }
 
   return (
-    <Card kind="Квест" title={quest.title} done={quest.status === "completed"}>
+    <Card id={`quest-${quest.id}`} kind="Квест" title={quest.title} done={quest.status === "completed"}>
       {quest.description ? <p className="mt-1 max-w-2xl text-sm text-muted">{quest.description}</p> : null}
       <p className="mt-2 text-sm text-muted">
         {questStatus(quest.status)}
@@ -214,6 +242,8 @@ function StepRow({
   const [comment, setComment] = useState(step.proofComment);
   const [path, setPath] = useState(step.proofPath);
   const [editing, setEditing] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const upload = useStore((state) => state.uploadImage);
   const proof = step.completionType === "proof";
   const automatic = step.completionType === "automatic";
   const sent = proof && (step.proofStatus === "pending" || step.proofStatus === "approved" || step.proofStatus === "rejected");
@@ -233,7 +263,24 @@ function StepRow({
       {sent && step.proofComment ? <p className="mt-1 text-sm text-muted">{step.proofComment}</p> : null}
       {showForm ? (
         <div className="mt-3 grid gap-2">
-          <TextInput value={path} onChange={(event) => setPath(event.target.value)} placeholder="Ссылка или путь к подтверждению" />
+          <input
+            type="file"
+            accept="image/jpeg,image/png,image/webp,application/pdf"
+            className="block w-full text-sm"
+            disabled={busy || uploading}
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              event.target.value = "";
+              if (!file) return;
+              setUploading(true);
+              void upload(file, "proofs").then((result) => {
+                setUploading(false);
+                if (!result.ok || !result.url) toast.error(result.ok ? "Сервер не вернул ссылку" : result.error);
+                else setPath(result.url);
+              });
+            }}
+          />
+          {path ? <a className="break-all text-sm text-brand" href={path}>{uploading ? "Загружаем…" : "Файл прикреплён"}</a> : <p className="text-xs text-muted">{uploading ? "Загружаем…" : "JPEG, PNG, WebP или PDF, до 2 МБ."}</p>}
           <TextArea value={comment} onChange={(event) => setComment(event.target.value)} placeholder="Комментарий" className="min-h-16" />
           <div className="flex flex-wrap gap-2">
             <Button
@@ -268,31 +315,10 @@ function StepRow({
 }
 
 function SurveyCard({ survey }: { survey: SurveyView }) {
-  const submit = useStore((state) => state.submitSurvey);
-  const [values, setValues] = useState<Record<string, unknown>>({});
-  const [busy, setBusy] = useState(false);
   const locked = !survey.canRespond;
 
-  async function send() {
-    const missing = survey.questions.find((question) => question.required && emptyAnswer(values[question.id]));
-    if (missing) {
-      toast.error("Заполните обязательные вопросы");
-      return;
-    }
-    setBusy(true);
-    const result = await submit(
-      survey.id,
-      survey.questions
-        .filter((question) => !emptyAnswer(values[question.id]))
-        .map((question) => ({ questionId: question.id, value: values[question.id] })),
-    );
-    setBusy(false);
-    if (!result.ok) toast.error(result.error);
-    else toast.success("Ответы отправлены");
-  }
-
   return (
-    <Card kind="Опрос" title={survey.title} done={survey.hasResponded && !survey.canRespond}>
+    <Card id={`survey-${survey.id}`} kind="Опрос" title={survey.title} done={survey.hasResponded && !survey.canRespond}>
       {survey.description ? <p className="mt-1 max-w-2xl text-sm text-muted">{survey.description}</p> : null}
       <p className="mt-2 text-sm text-muted">
         {survey.questionsCount} {questionsLabel(survey.questionsCount)}
@@ -300,21 +326,11 @@ function SurveyCard({ survey }: { survey: SurveyView }) {
         {survey.hasResponded ? " · вы уже отвечали" : ""}
       </p>
       {survey.questions.length === 0 ? <p className="mt-3 text-sm text-muted">Вопросов пока нет.</p> : null}
-      {locked && survey.questions.length > 0 ? <p className="mt-3 text-sm text-muted">Ответ уже отправлен.</p> : null}
+      {locked ? <p className="mt-3 text-sm text-muted">Ответ уже отправлен.</p> : null}
       {!locked && survey.questions.length > 0 ? (
-        <div className="mt-4 space-y-4">
-          {survey.questions.map((question) => (
-            <QuestionField
-              key={question.id}
-              question={question}
-              value={values[question.id]}
-              onChange={(value) => setValues((current) => ({ ...current, [question.id]: value }))}
-            />
-          ))}
-          <Button disabled={busy} onClick={() => void send()}>
-            Отправить ответы
-          </Button>
-        </div>
+        <Link to="/surveys/$surveyId" params={{ surveyId: survey.id }} className="mt-4 inline-block">
+          <Button>Пройти опрос</Button>
+        </Link>
       ) : null}
     </Card>
   );
@@ -426,7 +442,7 @@ function EventCard({ event }: { event: EventView }) {
   const canRegister = event.open && (event.status === "" || event.status === "cancelled");
 
   return (
-    <Card kind="Мероприятие" title={event.title} done={event.rewardClaimed}>
+    <Card id={`event-${event.id}`} kind="Мероприятие" title={event.title} done={event.rewardClaimed}>
       {event.description ? <p className="mt-1 max-w-2xl text-sm text-muted">{event.description}</p> : null}
       <p className="mt-2 text-sm text-muted">
         {eventStatus(event.status)}
@@ -458,7 +474,8 @@ function EventCard({ event }: { event: EventView }) {
 
 function AchievementCard({ item }: { item: AchievementView }) {
   return (
-    <Card kind="Достижение" title={item.name} done={item.earned}>
+    <Card id={`achievement-${item.id}`} kind="Достижение" title={item.name} done={item.earned}>
+      <AchievementMark iconUrl={item.iconUrl} earned={item.earned} className="mt-2 size-10" />
       {item.description ? <p className="mt-1 max-w-2xl text-sm text-muted">{item.description}</p> : null}
       <p className="mt-2 text-sm text-muted">
         {item.earned ? `Открыто ${item.earnedAt ? formatDateTime(item.earnedAt) : ""}` : conditionHint(item)}

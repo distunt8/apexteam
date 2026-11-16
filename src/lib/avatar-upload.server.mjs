@@ -25,6 +25,14 @@ export function imageType(bytes) {
   return null;
 }
 
+/** @param {Uint8Array} bytes */
+export function proofType(bytes) {
+  const image = imageType(bytes);
+  if (image) return image;
+  if (bytes.length >= 4 && String.fromCharCode(...bytes.slice(0, 4)) === "%PDF") return ["application/pdf", "pdf"];
+  return null;
+}
+
 /**
  * Authenticated multipart upload; never uses a privileged Storage key.
  * @param {Request} request
@@ -205,15 +213,16 @@ export async function uploadMedia(request, fetcher = fetch) {
     } catch {
       return json(400, "Не удалось прочитать файл.");
     }
-    const bucket = form.get("bucket") === "icons" ? "icons" : "products";
+    const asked = form.get("bucket");
+    const bucket = asked === "icons" || asked === "proofs" ? asked : "products";
     const file = form.get("file");
     if (!file || typeof file === "string" || file.size === 0)
-      return json(400, "Выберите изображение.");
-    if (file.size > MAX) return json(413, "Фото должно быть не больше 2 МБ.");
+      return json(400, "Выберите файл.");
+    if (file.size > MAX) return json(413, "Файл должен быть не больше 2 МБ.");
     const bytes = new Uint8Array(await file.arrayBuffer());
-    const type = imageType(bytes);
-    if (!type || file.type !== type[0])
-      return json(415, "Выберите фото в формате JPEG, PNG или WebP.");
+    const type = bucket === "proofs" ? proofType(bytes) : imageType(bytes);
+    if (!type || (bucket !== "proofs" && file.type !== type[0]) || (bucket === "proofs" && file.type && file.type !== type[0]))
+      return json(415, bucket === "proofs" ? "Нужен JPEG, PNG, WebP или PDF." : "Выберите фото в формате JPEG, PNG или WebP.");
     const storedPath = `${actor.id}/${crypto.randomUUID()}.${type[1]}`;
     const uploaded = await call(`${STORAGE}/storage/v1/object/${bucket}/${storedPath}`, {
       method: "POST",

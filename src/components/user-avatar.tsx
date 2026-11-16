@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { Pencil } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui";
 import { cn } from "@/lib/cn";
@@ -98,9 +99,15 @@ export function AvatarEditor({ user, compact = false }: { user: Person; compact?
           }}
         />
         <div className="flex flex-wrap gap-1">
-          <Button variant="line" disabled={pending} onClick={() => input.current?.click()}>
-            Изменить фото
-          </Button>
+          <button
+            type="button"
+            className="grid size-9 place-items-center rounded-full border border-line bg-surface text-ink shadow-sm transition hover:border-brand hover:text-brand"
+            aria-label="Изменить фото"
+            disabled={pending}
+            onClick={() => input.current?.click()}
+          >
+            <Pencil className="size-4" />
+          </button>
           {file ? (
             <>
               <Button

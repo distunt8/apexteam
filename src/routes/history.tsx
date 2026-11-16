@@ -1,9 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { Award, Gift, Heart, ShoppingBag, SlidersHorizontal, Undo2, type LucideIcon } from "lucide-react";
 import { useState } from "react";
 import { Pager, usePage } from "@/components/pager";
 import { Shell } from "@/components/shell";
 import { Chip } from "@/components/ui";
-import { formatDateTime, formatNumber } from "@/lib/format";
+import { formatDateTime, formatNumber, pointsLabel } from "@/lib/format";
 import { ENTRY_LABEL } from "@/lib/labels";
 import { useStore, type EntryType } from "@/lib/store";
 
@@ -50,24 +51,30 @@ function HistoryPage() {
       {rows.length === 0 ? (
         <p className="mt-8 text-sm text-muted">Операций с таким фильтром нет.</p>
       ) : (
-        <ul className="mt-4 divide-y divide-line rounded-lg border border-line">
+        <ul className="mt-4 divide-y divide-line overflow-hidden rounded-xl border border-line shadow-[0_10px_30px_-18px_rgba(20,40,70,0.45)]">
           {page.items.map((entry) => {
             const other = people.find((person) => person.id === entry.counterpartyId);
-            const budget = entry.type === "recognition_sent";
             const positive = entry.amount > 0;
             return (
-              <li key={entry.id} className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3 bg-surface px-4 py-3">
+              <li key={entry.id} className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 bg-surface px-4 py-3 transition hover:bg-brand-wash/60">
+                <span className="grid size-10 place-items-center rounded-full bg-brand-wash text-brand">
+                  <EntryIcon type={entry.type} />
+                </span>
                 <div className="min-w-0">
                   <p className="text-sm font-medium">{ENTRY_LABEL[entry.type]}</p>
                   <p className="mt-1 text-sm break-words text-muted">{entry.reason}</p>
                   {other ? <p className="mt-1 text-xs text-muted">{positive ? "От" : "Кому"}: {other.name}</p> : null}
                   <p className="mt-1 text-xs text-muted">{formatDateTime(entry.createdAt)}</p>
                 </div>
-                <p className={`shrink-0 text-right text-sm font-bold tabular ${positive ? "text-brand" : "text-ink"}`}>
-                  {positive ? "+" : ""}
-                  {formatNumber(entry.amount)}
-                  <span className="mt-1 block text-xs font-medium text-muted">{budget ? "рабочий" : "апексы"}</span>
-                </p>
+                <div className="shrink-0 text-right">
+                  <p className={`text-lg font-bold tabular ${positive ? "text-brand" : "text-ink"}`}>
+                    {positive ? "+" : ""}
+                    {formatNumber(entry.amount)} {pointsLabel(Math.abs(entry.amount))}
+                  </p>
+                  {entry.type === "manager_award" && entry.amount < 0 ? (
+                    <p className="text-xs font-medium text-muted">рабочий</p>
+                  ) : null}
+                </div>
               </li>
             );
           })}
@@ -76,4 +83,20 @@ function HistoryPage() {
       <Pager page={page.page} pages={page.pages} total={page.total} onPage={page.setPage} />
     </Shell>
   );
+}
+
+function EntryIcon({ type }: { type: EntryType }) {
+  const Icon: LucideIcon =
+    type === "recognition_received" || type === "recognition_sent"
+      ? Heart
+      : type === "manager_award"
+        ? Award
+        : type === "purchase"
+          ? ShoppingBag
+          : type === "refund"
+            ? Undo2
+            : type === "admin_adjustment"
+              ? SlidersHorizontal
+              : Gift;
+  return <Icon className="size-4" />;
 }

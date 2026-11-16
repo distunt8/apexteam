@@ -14,7 +14,7 @@ var install_page_default = "<!DOCTYPE html>\n<html lang=\"en\" class=\"device-de
 var grokOgIdentity = { "site": {
 	"title": "Апекс",
 	"card": "custom",
-	"description": "Корпоративная платформа вовлечённости: признание, баллы и каталог наград.",
+	"description": "Корпоративная платформа вовлечённости: признание, апексы и каталог наград.",
 	"image": "/og.jpg"
 } };
 //#endregion

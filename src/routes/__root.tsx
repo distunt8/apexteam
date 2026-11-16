@@ -5,6 +5,7 @@ import { SessionGate } from "@/components/auth-gate";
 import { THEME_BOOT, ThemeProvider, useTheme } from "@/lib/theme";
 import { EasterEggs } from "@/components/easter-eggs";
 import { Toaster } from "sonner";
+import { useEffect } from "react";
 import appCss from "../styles.css?url";
 
 export const Route = createRootRoute({
@@ -36,10 +37,23 @@ export const Route = createRootRoute({
 });
 
 function RootDocument() {
+  useEffect(() => {
+    try {
+      sessionStorage.removeItem("apex-chunk-reload");
+    } catch {
+      /* private mode */
+    }
+  }, []);
   return (
     <html lang="ru" suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_BOOT }} />
+        <script
+          dangerouslySetInnerHTML={{
+            __html:
+              'window.addEventListener("vite:preloadError",function(event){event.preventDefault();try{if(sessionStorage.getItem("apex-chunk-reload"))return;sessionStorage.setItem("apex-chunk-reload","1")}catch(e){}location.reload()});',
+          }}
+        />
         <HeadContent />
       </head>
       <body>

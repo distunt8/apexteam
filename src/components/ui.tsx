@@ -91,5 +91,14 @@ export function Chip({
 }
 
 export function Panel({ className, children }: { className?: string; children: ReactNode }) {
-  return <section className={cn("rounded-xl border border-line bg-surface p-5 sm:p-6", className)}>{children}</section>;
+  return (
+    <section
+      className={cn(
+        "rounded-xl border border-line bg-gradient-to-b from-surface to-card p-5 shadow-[0_10px_30px_-18px_rgba(20,40,70,0.45)] transition duration-200 hover:shadow-[0_16px_36px_-16px_rgba(20,40,70,0.4)] sm:p-6",
+        className,
+      )}
+    >
+      {children}
+    </section>
+  );
 }

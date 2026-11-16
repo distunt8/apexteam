@@ -172,6 +172,8 @@ export function AdminActivities() {
   const [stepDraft, setStepDraft] = useState<StepItem>(EMPTY_STEP);
   const [questionDraft, setQuestionDraft] = useState<QuestionItem>(EMPTY_QUESTION);
   const [error, setError] = useState("");
+  const [query, setQuery] = useState("");
+  const [onlyActive, setOnlyActive] = useState<"all" | "yes" | "no">("all");
 
   async function reload(next = kind) {
     setError("");
@@ -455,9 +457,11 @@ export function AdminActivities() {
       </div>
       {error ? <p className="mb-3 text-sm text-danger">{error}</p> : null}
       {kind === "proofs" ? (
-        <ul className="space-y-2">
-          {proofs.length === 0 ? <li className="text-sm text-muted">Проверок нет.</li> : null}
-          {proofs.map((item) => {
+        <div>
+          <TextInput value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Поиск проверки" aria-label="Поиск проверки" className="mb-3 max-w-xs" />
+          <ul className="space-y-2">
+          {proofs.filter((item) => `${item.quest} ${item.step} ${people.find((person) => person.id === item.userId)?.name ?? ""}`.toLowerCase().includes(query.trim().toLowerCase())).length === 0 ? <li className="text-sm text-muted">Проверок нет.</li> : null}
+          {proofs.filter((item) => `${item.quest} ${item.step} ${people.find((person) => person.id === item.userId)?.name ?? ""}`.toLowerCase().includes(query.trim().toLowerCase())).map((item) => {
             const author = people.find((person) => person.id === item.userId)?.name;
             const link = /^https?:\/\//i.test(item.path);
             return (
@@ -491,41 +495,42 @@ export function AdminActivities() {
             );
           })}
         </ul>
+        </div>
       ) : (
         <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
-          <div className="overflow-x-auto rounded-lg border border-line">
-            <table className="w-full min-w-[640px] text-left text-sm">
-              <thead className="bg-card text-xs text-muted">
-                <tr>
-                  <th className="px-3 py-2 font-medium">Название</th>
-                  <th className="px-3 py-2 font-medium">Награда</th>
-                  <th className="px-3 py-2 font-medium">Статус</th>
-                  <th className="px-3 py-2" />
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((row) => (
-                  <tr key={row.id} className="border-t border-line">
-                    <td className="px-3 py-2">
-                      <p className="font-medium">{row.title}</p>
-                      {row.extra ? <p className="text-xs text-muted">{row.extra}</p> : null}
-                    </td>
-                    <td className="px-3 py-2 tabular">{formatNumber(row.reward)}</td>
-                    <td className="px-3 py-2">{row.active ? "Активно" : "Скрыто"}</td>
-                    <td className="px-3 py-2 text-right">
-                      <button type="button" className="font-semibold text-brand" onClick={() => setDraft(row)}>
-                        Изменить
+          <div>
+            <div className="mb-3 flex flex-wrap gap-2">
+              <TextInput value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Поиск" aria-label="Поиск активности" className="max-w-xs" />
+              <select className="h-11 rounded-md border border-line bg-surface px-3 text-sm" value={onlyActive} onChange={(event) => setOnlyActive(event.target.value as "all" | "yes" | "no")} aria-label="Статус активности">
+                <option value="all">Все</option>
+                <option value="yes">Активные</option>
+                <option value="no">Скрытые</option>
+              </select>
+            </div>
+            <ul className="grid gap-3 sm:grid-cols-2">
+              {rows
+                .filter((row) => {
+                  if (onlyActive === "yes" && !row.active) return false;
+                  if (onlyActive === "no" && row.active) return false;
+                  const needle = query.trim().toLowerCase();
+                  return !needle || `${row.title} ${row.description} ${row.extra}`.toLowerCase().includes(needle);
+                })
+                .map((row) => (
+                  <li key={row.id}>
+                    <button type="button" onClick={() => setDraft(row)} className="flex h-full w-full flex-col rounded-xl border border-line bg-gradient-to-b from-surface to-card p-3 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-brand-mid hover:shadow-md">
+                      <span className="font-semibold">{row.title}</span>
+                      {row.extra ? <span className="mt-1 text-xs text-muted">{row.extra}</span> : null}
+                      <span className="mt-2 text-sm">{formatNumber(row.reward)} апексов</span>
+                      <span className={`mt-2 inline-flex w-fit rounded-full px-2 py-0.5 text-xs font-semibold ${row.active ? "bg-emerald-100 text-emerald-800" : "bg-card text-muted"}`}>{row.active ? "Активно" : "Скрыто"}</span>
+                    </button>
+                    {kind !== "achievements" ? (
+                      <button type="button" className="mt-1 text-xs font-semibold text-muted hover:text-ink" onClick={() => void remove(row.id)}>
+                        Скрыть
                       </button>
-                      {kind !== "achievements" ? (
-                        <button type="button" className="ml-3 font-semibold text-muted" onClick={() => void remove(row.id)}>
-                          Скрыть
-                        </button>
-                      ) : null}
-                    </td>
-                  </tr>
+                    ) : null}
+                  </li>
                 ))}
-              </tbody>
-            </table>
+            </ul>
           </div>
           <form
             className="space-y-3 rounded-lg bg-card p-4"
