@@ -1,0 +1,12 @@
+node_modules
+.output
+dist
+build
+.git
+.grok
+.env
+.env.*
+**/secrets
+**/backups
+coverage
+*.log
