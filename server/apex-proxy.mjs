@@ -1,6 +1,6 @@
 import { uploadAvatar, uploadMedia } from "../src/lib/avatar-upload.server.mjs";
 
-const ORIGIN = "https://apexapp-backend.onrender.com";
+const ORIGIN = process.env.APEX_API_ORIGIN ?? "https://apexapp-backend.onrender.com";
 
 /** @param {Request} request */
 export async function proxyApex(request) {

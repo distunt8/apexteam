@@ -1,0 +1,65 @@
+diff --git a/server/apex-proxy.mjs b/server/apex-proxy.mjs
+index 1067462..a823887 100644
+--- a/server/apex-proxy.mjs
++++ b/server/apex-proxy.mjs
+@@ -1,6 +1,6 @@
+ import { uploadAvatar, uploadMedia } from "../src/lib/avatar-upload.server.mjs";
+ 
+-const ORIGIN = "https://apexapp-backend.onrender.com";
++const ORIGIN = process.env.APEX_API_ORIGIN ?? "https://apexapp-backend.onrender.com";
+ 
+ /** @param {Request} request */
+ export async function proxyApex(request) {
+diff --git a/vite.config.ts b/vite.config.ts
+index 1feb2c8..447e008 100644
+--- a/vite.config.ts
++++ b/vite.config.ts
+@@ -222,7 +222,7 @@ export default defineConfig(({ command, isPreview }) => ({
+     ...(command === "build" || isPreview
+       ? [
+           nitro({
+-            preset: "vercel",
++            preset: process.env.NITRO_PRESET ?? "vercel",
+             // Auto-registers server/middleware/* (the PWA install page +
+             // manifest + head-tag middleware). Nitro v3 defaults serverDir to
+             // false, so removing this silently unwires /?install=1 on deploys.
+diff --git a/Dockerfile b/Dockerfile
+new file mode 100644
+index 0000000..cc5046f
+--- /dev/null
++++ b/Dockerfile
+@@ -0,0 +1,16 @@
++FROM node:22-alpine AS build
++WORKDIR /app
++COPY package.json package-lock.json ./
++RUN npm ci
++COPY . .
++ARG VITE_AUTH_ENABLED=false
++ENV VITE_AUTH_ENABLED=$VITE_AUTH_ENABLED NITRO_PRESET=node-server NODE_ENV=production
++RUN npm run build
++
++FROM node:22-alpine AS runtime
++WORKDIR /app
++ENV NODE_ENV=production HOST=0.0.0.0 PORT=8080
++COPY --from=build --chown=node:node /app/.output ./.output
++USER node
++EXPOSE 8080
++CMD ["node", ".output/server/index.mjs"]
+diff --git a/.dockerignore b/.dockerignore
+new file mode 100644
+index 0000000..b1d30e5
+--- /dev/null
++++ b/.dockerignore
+@@ -0,0 +1,12 @@
++node_modules
++.output
++dist
++build
++.git
++.grok
++.env
++.env.*
++**/secrets
++**/backups
++coverage
++*.log
