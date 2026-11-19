@@ -4,10 +4,10 @@ import { AchievementMark } from "@/components/achievement-mark";
 import { Shell } from "@/components/shell";
 import { Panel } from "@/components/ui";
 import { UserAvatar } from "@/components/user-avatar";
-import { apex } from "@/lib/apex";
+import { achievementIconUrl, apex, readThanks } from "@/lib/apex";
 import { formatDateTime, formatNumber } from "@/lib/format";
 import { ROLE_LABEL } from "@/lib/labels";
-import { useStore } from "@/lib/store";
+import { useStore, type FeedItem } from "@/lib/store";
 
 export const Route = createFileRoute("/people/$userId")({ component: PersonPage });
 
@@ -18,7 +18,15 @@ function PersonPage() {
   const board = useStore((state) => state.leaderboard);
   const kind = useStore((state) => state.leaderboardKind);
   const feed = useStore((state) => state.feed);
+  const people = useStore((state) => state.people);
+  const engagement = useStore((state) => state.engagement);
   const [badges, setBadges] = useState<{ id: string; name: string; iconUrl: string }[]>([]);
+  const [thanks, setThanks] = useState<FeedItem[]>([]);
+  useEffect(() => {
+    void apex(`/api/thanks/received/${userId}`)
+      .then((data) => setThanks(readThanks(data)))
+      .catch(() => setThanks(feed.filter((item) => item.toId === userId)));
+  }, [userId, feed]);
   useEffect(() => {
     void apex(`/api/achievements/users/${userId}`)
       .then((data) => {
@@ -26,19 +34,19 @@ function PersonPage() {
         if (!Array.isArray(list)) return;
         setBadges(
           list.map((item) => {
-            const record = item as { achievement?: { id?: unknown; name?: unknown; iconUrl?: unknown }; id?: unknown };
+            const record = item as { achievement?: { id?: unknown; code?: unknown; name?: unknown; iconUrl?: unknown }; id?: unknown; code?: unknown };
             const achievement = record.achievement ?? record;
+            const code = String((achievement as { code?: unknown }).code ?? "");
             return {
               id: String((achievement as { id?: unknown }).id ?? record.id ?? ""),
               name: String((achievement as { name?: unknown }).name ?? "Достижение"),
-              iconUrl: String((achievement as { iconUrl?: unknown }).iconUrl ?? ""),
+              iconUrl: achievementIconUrl(code, String((achievement as { iconUrl?: unknown }).iconUrl ?? "")),
             };
           }),
         );
       })
       .catch(() => setBadges([]));
   }, [userId]);
-  const thanks = feed.filter((item) => item.toId === userId);
   const score = board.find((item) => item.id === userId)?.score ?? person?.score ?? 0;
 
   return (
@@ -65,7 +73,9 @@ function PersonPage() {
               </div>
             </div>
             <p className="mt-4 text-sm">
-              {kind === "activity" ? "Апексы за активности" : "Благодарности в рейтинге"}: <span className="font-semibold">{formatNumber(score)}</span>
+              {person.id === me && engagement
+                ? <>Уровень активности: <span className="font-semibold">{engagement.title}</span></>
+                : <>{kind === "level" ? "Индекс активности" : "Благодарности в рейтинге"}: <span className="font-semibold">{formatNumber(score)}</span></>}
             </p>
             {person.status !== "active" ? <p className="mt-2 text-sm text-muted">Аккаунт заблокирован</p> : null}
             {person.id === me ? (
@@ -80,11 +90,11 @@ function PersonPage() {
           </Panel>
           <Panel className="mt-4">
             <h2 className="font-bold">Полученные благодарности</h2>
-            {thanks.length === 0 ? <p className="mt-2 text-sm text-muted">В вашей ленте таких благодарностей нет.</p> : null}
+            {thanks.length === 0 ? <p className="mt-2 text-sm text-muted">Полученных благодарностей пока нет.</p> : null}
             <ul className="mt-3 space-y-2">
               {thanks.slice(0, 8).map((item) => (
                 <li key={item.id} className="text-sm">
-                  <span className="font-medium">{item.fromName || "Коллега"}</span>
+                  <span className="font-medium">{thanksFrom(item, people)}</span>
                   {item.message ? <span className="text-muted"> — {item.message}</span> : null}
                   <span className="mt-1 block text-xs text-muted">{item.createdAt ? formatDateTime(item.createdAt) : ""}</span>
                 </li>
@@ -107,4 +117,11 @@ function PersonPage() {
       )}
     </Shell>
   );
+}
+
+function thanksFrom(item: FeedItem, people: { id: string; name: string }[]) {
+  const person = people.find((entry) => entry.id === item.fromId);
+  if (person?.name) return person.name;
+  if (item.fromName && !/^[0-9a-f-]{36}$/i.test(item.fromName)) return item.fromName;
+  return "Сотрудник";
 }

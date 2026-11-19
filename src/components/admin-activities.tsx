@@ -1,6 +1,7 @@
+import { Pencil } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { Button, Field, TextArea, TextInput } from "@/components/ui";
+import { Button, Field, NumericInput, TextArea, TextInput } from "@/components/ui";
 import { apex, listOf } from "@/lib/apex";
 import { formatNumber } from "@/lib/format";
 import { useStore } from "@/lib/store";
@@ -430,6 +431,59 @@ export function AdminActivities() {
     }
   }
 
+  function activityEditor() {
+    if (!draft) return null;
+    return (
+      <form
+        className="grid gap-3 lg:grid-cols-2"
+        onSubmit={(event) => {
+          event.preventDefault();
+          void save();
+        }}
+      >
+        <Field label="Название">
+          <TextInput value={draft.title} onChange={(event) => setDraft({ ...draft, title: event.target.value })} />
+        </Field>
+        <Field label="Награда, апексы">
+          <NumericInput value={draft.reward} onChange={(reward) => setDraft({ ...draft, reward })} />
+        </Field>
+        <div className="lg:col-span-2">
+          <Field label="Описание">
+            <TextArea value={draft.description} onChange={(event) => setDraft({ ...draft, description: event.target.value })} />
+          </Field>
+        </div>
+        {kind === "events" ? (
+          <>
+            <Field label="Место">
+              <TextInput value={draft.location} onChange={(event) => setDraft({ ...draft, location: event.target.value })} />
+            </Field>
+            <Field label="Мест, пусто — без лимита">
+              <TextInput value={draft.maxParticipants} onChange={(event) => setDraft({ ...draft, maxParticipants: event.target.value })} />
+            </Field>
+          </>
+        ) : null}
+        {kind !== "achievements" ? (
+          <>
+            <Field label="Начало">
+              <TextInput type="datetime-local" value={draft.startAt} onChange={(event) => setDraft({ ...draft, startAt: event.target.value })} />
+            </Field>
+            <Field label="Конец">
+              <TextInput type="datetime-local" value={draft.endAt} onChange={(event) => setDraft({ ...draft, endAt: event.target.value })} />
+            </Field>
+          </>
+        ) : null}
+        <label className="flex min-h-11 items-center gap-2 text-sm lg:col-span-2">
+          <input type="checkbox" checked={draft.active} onChange={(event) => setDraft({ ...draft, active: event.target.checked })} />
+          Показывать сотрудникам
+        </label>
+        <div className="flex flex-wrap gap-2 lg:col-span-2">
+          <Button type="submit">Сохранить</Button>
+          <Button type="button" variant="line" onClick={() => setDraft(null)}>Отмена</Button>
+        </div>
+      </form>
+    );
+  }
+
   const tabs: { id: Kind; label: string }[] = [
     { id: "quests", label: "Квесты" },
     { id: "surveys", label: "Опросы" },
@@ -497,115 +551,51 @@ export function AdminActivities() {
         </ul>
         </div>
       ) : (
-        <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
-          <div>
-            <div className="mb-3 flex flex-wrap gap-2">
-              <TextInput value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Поиск" aria-label="Поиск активности" className="max-w-xs" />
-              <select className="h-11 rounded-md border border-line bg-surface px-3 text-sm" value={onlyActive} onChange={(event) => setOnlyActive(event.target.value as "all" | "yes" | "no")} aria-label="Статус активности">
-                <option value="all">Все</option>
-                <option value="yes">Активные</option>
-                <option value="no">Скрытые</option>
-              </select>
-            </div>
-            <ul className="grid gap-3 sm:grid-cols-2">
-              {rows
-                .filter((row) => {
-                  if (onlyActive === "yes" && !row.active) return false;
-                  if (onlyActive === "no" && row.active) return false;
-                  const needle = query.trim().toLowerCase();
-                  return !needle || `${row.title} ${row.description} ${row.extra}`.toLowerCase().includes(needle);
-                })
-                .map((row) => (
-                  <li key={row.id}>
-                    <button type="button" onClick={() => setDraft(row)} className="flex h-full w-full flex-col rounded-xl border border-line bg-gradient-to-b from-surface to-card p-3 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-brand-mid hover:shadow-md">
-                      <span className="font-semibold">{row.title}</span>
-                      {row.extra ? <span className="mt-1 text-xs text-muted">{row.extra}</span> : null}
-                      <span className="mt-2 text-sm">{formatNumber(row.reward)} апексов</span>
-                      <span className={`mt-2 inline-flex w-fit rounded-full px-2 py-0.5 text-xs font-semibold ${row.active ? "bg-emerald-100 text-emerald-800" : "bg-card text-muted"}`}>{row.active ? "Активно" : "Скрыто"}</span>
-                    </button>
-                    {kind !== "achievements" ? (
-                      <button type="button" className="mt-1 text-xs font-semibold text-muted hover:text-ink" onClick={() => void remove(row.id)}>
-                        Скрыть
-                      </button>
-                    ) : null}
-                  </li>
-                ))}
-            </ul>
+        <div>
+          <div className="mb-3 flex flex-wrap gap-2">
+            <TextInput value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Поиск" aria-label="Поиск активности" className="max-w-xs" />
+            <select className="h-11 rounded-md border border-line bg-surface px-3 text-sm" value={onlyActive} onChange={(event) => setOnlyActive(event.target.value as "all" | "yes" | "no")} aria-label="Статус активности">
+              <option value="all">Все</option>
+              <option value="yes">Активные</option>
+              <option value="no">Скрытые</option>
+            </select>
+            {kind !== "achievements" ? <Button variant="line" onClick={() => setDraft({ ...EMPTY })}>Новая</Button> : null}
           </div>
-          <form
-            className="space-y-3 rounded-lg bg-card p-4"
-            onSubmit={(event) => {
-              event.preventDefault();
-              void save();
-            }}
-          >
-            <div className="flex items-center justify-between">
-              <h2 className="font-bold">{draft?.id ? "Редактирование" : "Новая запись"}</h2>
-              {kind !== "achievements" ? (
-                <button type="button" className="text-sm font-semibold text-brand" onClick={() => setDraft({ ...EMPTY })}>
-                  Новая
-                </button>
-              ) : null}
-            </div>
-            {draft ? (
-              <>
-                <Field label={kind === "achievements" ? "Название" : "Название"}>
-                  <TextInput value={draft.title} onChange={(event) => setDraft({ ...draft, title: event.target.value })} />
-                </Field>
-                <Field label="Описание">
-                  <TextArea value={draft.description} onChange={(event) => setDraft({ ...draft, description: event.target.value })} />
-                </Field>
-                <Field label="Награда, апексы">
-                  <TextInput
-                    inputMode="numeric"
-                    value={draft.reward}
-                    onChange={(event) => setDraft({ ...draft, reward: Number(event.target.value) })}
-                  />
-                </Field>
-                {kind === "events" ? (
-                  <>
-                    <Field label="Место">
-                      <TextInput value={draft.location} onChange={(event) => setDraft({ ...draft, location: event.target.value })} />
-                    </Field>
-                    <Field label="Мест, пусто — без лимита">
-                      <TextInput
-                        inputMode="numeric"
-                        value={draft.maxParticipants}
-                        onChange={(event) => setDraft({ ...draft, maxParticipants: event.target.value })}
-                      />
-                    </Field>
-                  </>
-                ) : null}
-                {kind !== "achievements" ? (
-                  <div className="grid grid-cols-1 gap-3">
-                    <Field label="Начало">
-                      <TextInput type="datetime-local" value={draft.startAt} onChange={(event) => setDraft({ ...draft, startAt: event.target.value })} />
-                    </Field>
-                    <Field label="Конец">
-                      <TextInput type="datetime-local" value={draft.endAt} onChange={(event) => setDraft({ ...draft, endAt: event.target.value })} />
-                    </Field>
-                  </div>
-                ) : null}
-                <label className="flex min-h-11 items-center gap-2 text-sm">
-                  <input type="checkbox" checked={draft.active} onChange={(event) => setDraft({ ...draft, active: event.target.checked })} />
-                  Показывать сотрудникам
-                </label>
-                <Button type="submit" className="w-full">
-                  Сохранить
-                </Button>
-              </>
-            ) : (
-              <p className="text-sm text-muted">
-                {kind === "achievements"
-                  ? "Выберите достижение. Новые создаются на сервере, здесь можно изменить название и награду."
-                  : "Выберите запись или создайте новую."}
-              </p>
-            )}
-          </form>
+          {draft && !draft.id ? <div className="mb-3 rounded-xl border-2 border-brand bg-brand-wash p-4 shadow-md">{activityEditor()}</div> : null}
+          <ul className="grid gap-3 sm:grid-cols-2">
+            {rows
+              .filter((row) => {
+                if (onlyActive === "yes" && !row.active) return false;
+                if (onlyActive === "no" && row.active) return false;
+                const needle = query.trim().toLowerCase();
+                return !needle || `${row.title} ${row.description} ${row.extra}`.toLowerCase().includes(needle);
+              })
+              .map((row) => {
+                const open = draft?.id === row.id;
+                return (
+                  <li key={row.id} className={open ? "sm:col-span-2" : ""}>
+                    <div className={open ? "rounded-xl border-2 border-brand bg-brand-wash p-3 shadow-md" : "rounded-xl border border-line bg-surface p-3 shadow-sm"}>
+                      <div className="flex items-start gap-3">
+                        <div className="min-w-0 flex-1">
+                          <p className="font-semibold">{row.title}</p>
+                          {row.extra ? <p className="mt-1 text-xs text-muted">{row.extra}</p> : null}
+                          <p className="mt-1 text-sm">{formatNumber(row.reward)} апексов</p>
+                        </div>
+                        <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${row.active ? "bg-emerald-100 text-emerald-800" : "bg-card text-muted"}`}>{row.active ? "Активно" : "Скрыто"}</span>
+                        <button type="button" className="grid size-10 shrink-0 place-items-center rounded-full border border-line hover:border-brand hover:text-brand" aria-label={`Редактировать ${row.title}`} onClick={() => setDraft(open ? null : row)}>
+                          <Pencil className="size-4" />
+                        </button>
+                      </div>
+                      {open ? <div className="mt-3 border-t border-line pt-3">{activityEditor()}</div> : null}
+                    </div>
+                  </li>
+                );
+              })}
+          </ul>
         </div>
       )}
       {draft?.id && kind === "quests" ? (
-        <section className="mt-6 rounded-lg bg-card p-4">
+        <section className="mt-6 rounded-xl border-2 border-brand bg-brand-wash p-4 shadow-md">
           <h2 className="font-bold">Шаги квеста</h2>
           <ul className="mt-3 space-y-2">
             {steps.length === 0 ? <li className="text-sm text-muted">Шагов пока нет.</li> : null}
@@ -641,21 +631,21 @@ export function AdminActivities() {
               <TextArea value={stepDraft.description} onChange={(event) => setStepDraft({ ...stepDraft, description: event.target.value })} />
             </Field>
             <Field label="Порядок">
-              <TextInput inputMode="numeric" value={stepDraft.sortOrder} onChange={(event) => setStepDraft({ ...stepDraft, sortOrder: Number(event.target.value) })} />
+              <NumericInput value={stepDraft.sortOrder} onChange={(sortOrder) => setStepDraft({ ...stepDraft, sortOrder })} />
             </Field>
           </div>
           <label className="mt-3 flex min-h-11 items-center gap-2 text-sm">
             <input type="checkbox" checked={stepDraft.required} onChange={(event) => setStepDraft({ ...stepDraft, required: event.target.checked })} />
             Обязательный шаг
           </label>
-          <div className="mt-3 flex gap-2">
+          <div className="mt-3 flex flex-wrap gap-2">
             <Button type="button" onClick={() => void saveStep()}>{stepDraft.id ? "Сохранить шаг" : "Добавить шаг"}</Button>
-            {stepDraft.id ? <Button type="button" variant="line" onClick={() => setStepDraft(EMPTY_STEP)}>Новый шаг</Button> : null}
+            <Button type="button" variant="line" onClick={() => setStepDraft(EMPTY_STEP)}>Отмена</Button>
           </div>
         </section>
       ) : null}
       {draft?.id && kind === "surveys" ? (
-        <section className="mt-6 rounded-lg bg-card p-4">
+        <section className="mt-6 rounded-xl border-2 border-brand bg-brand-wash p-4 shadow-md">
           <h2 className="font-bold">Вопросы опроса</h2>
           <ul className="mt-3 space-y-2">
             {questions.length === 0 ? <li className="text-sm text-muted">Вопросов пока нет.</li> : null}
@@ -693,16 +683,16 @@ export function AdminActivities() {
               </Field>
             ) : null}
             <Field label="Порядок">
-              <TextInput inputMode="numeric" value={questionDraft.sortOrder} onChange={(event) => setQuestionDraft({ ...questionDraft, sortOrder: Number(event.target.value) })} />
+              <NumericInput value={questionDraft.sortOrder} onChange={(sortOrder) => setQuestionDraft({ ...questionDraft, sortOrder })} />
             </Field>
           </div>
           <label className="mt-3 flex min-h-11 items-center gap-2 text-sm">
             <input type="checkbox" checked={questionDraft.required} onChange={(event) => setQuestionDraft({ ...questionDraft, required: event.target.checked })} />
             Обязательный вопрос
           </label>
-          <div className="mt-3 flex gap-2">
+          <div className="mt-3 flex flex-wrap gap-2">
             <Button type="button" onClick={() => void saveQuestion()}>{questionDraft.id ? "Сохранить вопрос" : "Добавить вопрос"}</Button>
-            {questionDraft.id ? <Button type="button" variant="line" onClick={() => setQuestionDraft(EMPTY_QUESTION)}>Новый вопрос</Button> : null}
+            <Button type="button" variant="line" onClick={() => setQuestionDraft(EMPTY_QUESTION)}>Отмена</Button>
           </div>
         </section>
       ) : null}

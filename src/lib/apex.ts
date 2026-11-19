@@ -432,10 +432,17 @@ export function mapTransaction(raw: unknown, userId: string): LedgerEntry | null
   };
 }
 
+function displayName(value: unknown) {
+  const text = str(value).trim();
+  if (!text || /^[0-9a-f-]{36}$/i.test(text)) return "";
+  return text;
+}
+
 function personName(raw: unknown) {
   const record = obj(raw);
   if (!record) return "";
-  return fullName(record);
+  const named = fullName(record);
+  return named === "Сотрудник" && !str(record.name || record.fullName) ? "" : named;
 }
 
 function mapThank(raw: unknown): FeedItem | null {
@@ -450,13 +457,19 @@ function mapThank(raw: unknown): FeedItem | null {
     id: str(id),
     fromId: str(record.fromUserId || record.senderId || record.fromId || from?.id || ""),
     toId: str(record.toUserId || record.recipientId || record.toId || to?.id || ""),
-    fromName: personName(from),
-    toName: personName(to),
+    fromName: personName(from) || displayName(record.fromUserName) || displayName(record.senderName) || displayName(record.fromName),
+    toName: personName(to) || displayName(record.toUserName) || displayName(record.recipientName) || displayName(record.toName),
     amount: num(record.amount ?? record.points),
     message: str(record.message || record.text),
     kind: /manager|bonus|поощр/.test(kindBlob) ? "manager" : "peer",
     createdAt: str(record.createdAt || new Date().toISOString()),
   };
+}
+
+export function readThanks(data: unknown) {
+  return listOf(data)
+    .map(mapThank)
+    .filter((item): item is FeedItem => Boolean(item));
 }
 
 function mapManagerBonus(raw: unknown, userId: string): FeedItem | null {
@@ -531,7 +544,7 @@ export interface Workspace {
   feed: FeedItem[];
   roleCatalog: RoleOption[];
   leaderboard: BoardRow[];
-  leaderboardKind: "activity" | "thanks";
+  leaderboardKind: "level" | "thanks";
   departmentIds: string[];
   rewardBalance: number | null;
   mustChangePassword: boolean;
@@ -641,6 +654,14 @@ export async function loadWorkspace(): Promise<Workspace> {
   if (!productsRes.ok && productsRes.error instanceof ApexError && productsRes.error.status !== 404) {
     warnings.push(`Каталог: ${productsRes.error.message}`);
   }
+  if (products.some((item) => item.discountPercent)) {
+    const details = await Promise.all(products.map((item) => optional(`/api/products/${item.id}`)));
+    details.forEach((pack, index) => {
+      if (!pack.ok) return;
+      const fresh = mapProduct(pack.data, index, categoryNames);
+      if (fresh) products[index] = fresh;
+    });
+  }
 
   const cart = cartRes.ok
     ? noteList(cartRes.data, "Корзина", warnings)
@@ -656,6 +677,7 @@ export async function loadWorkspace(): Promise<Workspace> {
     ? noteList(ordersRes.data, "Заказы", warnings)
         .map((item) => mapOrder(item, me.id))
         .filter((item): item is Order => Boolean(item))
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
     : [];
   if (!ordersRes.ok && ordersRes.error instanceof ApexError) warnings.push(`Заказы: ${ordersRes.error.message}`);
 
@@ -699,28 +721,37 @@ export async function loadWorkspace(): Promise<Workspace> {
         .filter((item): item is BoardRow => Boolean(item))
     : [];
   if (!boardRes.ok && boardRes.error instanceof ApexError) warnings.push(`Лидерборд: ${boardRes.error.message}`);
-  const activityTotals = new Map<string, number>();
+  const levelTotals = new Map<string, number>();
+  const now = Date.now();
+  const day = 86_400_000;
   if (allTxRes.ok) {
+    for (const person of people.values()) {
+      if (person.status === "active") levelTotals.set(person.id, 0);
+    }
     for (const item of noteList(allTxRes.data, "Активность", [])) {
       const record = obj(item);
       if (!record) continue;
       const kind = str(record.relatedEntityType).toLowerCase();
-      if (!["quest", "survey", "event", "achievement"].includes(kind)) continue;
-      const amount = num(record.amount);
-      if (amount <= 0) continue;
+      if (!["quest", "survey", "event", "achievement", "thank"].includes(kind)) continue;
+      const created = Date.parse(str(record.createdAt));
+      if (!Number.isFinite(created)) continue;
+      const age = (now - created) / day;
+      if (age < 0 || age > 30) continue;
+      const weight = age <= 7 ? 1 : age <= 14 ? 0.7 : 0.4;
       const id = str(record.userId);
       if (!id) continue;
-      activityTotals.set(id, (activityTotals.get(id) ?? 0) + amount);
-    }
-    for (const person of people.values()) {
-      if (person.status === "active" && !activityTotals.has(person.id)) activityTotals.set(person.id, 0);
+      levelTotals.set(id, (levelTotals.get(id) ?? 0) + weight);
     }
   }
-  const leaderboardKind = allTxRes.ok ? "activity" : "thanks";
+  const leaderboardKind = allTxRes.ok ? "level" : "thanks";
   const leaderboard =
-    leaderboardKind === "activity"
-      ? [...activityTotals.entries()]
-          .map(([id, score]) => ({ id, name: people.get(id)?.name || "Сотрудник", score }))
+    leaderboardKind === "level"
+      ? [...levelTotals.entries()]
+          .map(([id, score]) => ({
+            id,
+            name: people.get(id)?.name || "Сотрудник",
+            score: Math.round(score * 10) / 10,
+          }))
           .sort((a, b) => b.score - a.score || a.name.localeCompare(b.name, "ru"))
       : thanksBoard;
   for (const row of leaderboard) {
@@ -1029,6 +1060,19 @@ function mapEvent(item: unknown, details: unknown): EventView | null {
   };
 }
 
+const ACHIEVEMENT_ICONS: Record<string, string> = {
+  FIRST_ORDER:
+    "https://hqvphndmvluncjfsqspf.supabase.co/storage/v1/object/public/icons/2c659784-e804-415c-9e93-982615ed81ff/achievements/FIRST_ORDER.jpg",
+  FIRST_THANK:
+    "https://hqvphndmvluncjfsqspf.supabase.co/storage/v1/object/public/icons/2c659784-e804-415c-9e93-982615ed81ff/achievements/FIRST_THANK.jpg",
+  FIRST_ACTIVITY:
+    "https://hqvphndmvluncjfsqspf.supabase.co/storage/v1/object/public/icons/2c659784-e804-415c-9e93-982615ed81ff/achievements/FIRST_ACTIVITY.jpg",
+};
+
+export function achievementIconUrl(code: string, iconUrl?: string) {
+  return iconUrl || ACHIEVEMENT_ICONS[code] || "";
+}
+
 function mapAchievement(item: unknown, earnedAt: Map<string, string>): AchievementView | null {
   const record = obj(item);
   if (!record || record.id == null || record.isActive === false) return null;
@@ -1040,7 +1084,7 @@ function mapAchievement(item: unknown, earnedAt: Map<string, string>): Achieveme
     description: str(record.description),
     reward: num(record.rewardAmount),
     conditionType: str(record.conditionType),
-    iconUrl: str(record.iconUrl || record.icon),
+    iconUrl: achievementIconUrl(str(record.code), str(record.iconUrl || record.icon)),
     earned: earnedAt.has(id),
     earnedAt: earnedAt.get(id) ?? "",
   };
@@ -1145,12 +1189,18 @@ export function mapTicket(raw: unknown): Ticket | null {
     userId: str(record.userId),
     userName: str(record.userName) || joinName(record, "user"),
     assignedTo: str(record.assignedTo),
-    assignedName: str(record.assignedToName) || joinName(record, "assignedTo"),
+    assignedName: assignedTicketName(record),
     subject: str(record.subject || "Обращение"),
     status: mapTicketStatus(record.status),
     createdAt: str(record.createdAt),
     messages,
   };
+}
+
+function assignedTicketName(record: Record<string, unknown>) {
+  const named = displayName(record.assignedToName);
+  if (named) return named;
+  return [record.assignedToLastName, record.assignedToFirstName, record.assignedToMiddleName].map(str).filter(Boolean).join(" ");
 }
 
 function joinName(record: Record<string, unknown>, prefix = "") {

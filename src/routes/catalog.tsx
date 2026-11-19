@@ -103,14 +103,14 @@ function CatalogPage() {
                   {product.badges && product.badges.length > 0 ? (
                     <div className="absolute top-2 left-2 flex flex-wrap gap-1">
                       {product.badges.map((badge) => (
-                        <span key={badge.name} className="rounded-full px-2 py-0.5 text-[11px] font-semibold text-white" style={{ background: badge.color }}>
+                        <span key={badge.name} className="rounded-full px-3 py-1 text-sm font-semibold text-white shadow-sm" style={{ background: badge.color }}>
                           {badge.name}
                         </span>
                       ))}
                     </div>
                   ) : null}
                   {product.discountPercent ? (
-                    <span className="absolute top-2 right-2 rounded-full bg-rose-600 px-2 py-0.5 text-[11px] font-semibold text-white">−{product.discountPercent}%</span>
+                    <span className="absolute top-3 right-3 rounded-full bg-rose-600 px-3 py-1 text-sm font-bold text-white shadow-sm">−{product.discountPercent}%</span>
                   ) : null}
                 </div>
                 <div className="p-4 pb-0">

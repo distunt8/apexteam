@@ -1,12 +1,15 @@
 import { AdminActivities } from "@/components/admin-activities";
+import { AdminAi } from "@/components/admin-ai";
+import { AdminAnalytics } from "@/components/admin-analytics";
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { Pencil } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Pager, usePage } from "@/components/pager";
 import { NewsDesk, ProductTools } from "@/components/product-tools";
 import { UserAvatar } from "@/components/user-avatar";
 import { Shell } from "@/components/shell";
-import { Button, Field, TextArea, TextInput } from "@/components/ui";
+import { Button, Field, NumericInput, TextArea, TextInput } from "@/components/ui";
 import { formatNumber } from "@/lib/format";
 import { categoryLabel, ENTRY_LABEL, ORDER_FLOW, orderStatusLabel, ROLE_LABEL, roleCodeLabel, TICKET_STATUS } from "@/lib/labels";
 import {
@@ -22,7 +25,7 @@ import {
 
 export const Route = createFileRoute("/admin")({ component: AdminPage });
 
-const TABS = ["Товары", "Заказы", "Сотрудники", "Активности", "Экономика", "Обращения", "Лента"] as const;
+const TABS = ["Товары", "Заказы", "Сотрудники", "Активности", "Экономика", "Обращения", "Лента", "Аналитика", "Нейросеть"] as const;
 type AdminTab = (typeof TABS)[number];
 
 function tabsFor(role: Role): AdminTab[] {
@@ -31,7 +34,7 @@ function tabsFor(role: Role): AdminTab[] {
   if (role === "support") return ["Обращения"];
   if (role === "manager") return ["Сотрудники"];
   if (role === "admin" || role === "chief") return [...TABS];
-  return TABS.filter((item) => item !== "Лента");
+  return TABS.filter((item) => item !== "Лента" && item !== "Аналитика" && item !== "Нейросеть");
 }
 
 function AdminPage() {
@@ -92,6 +95,8 @@ function AdminPage() {
         {current === "Экономика" ? <Economy /> : null}
         {current === "Обращения" ? <Tickets /> : null}
         {current === "Лента" ? <NewsDesk /> : null}
+        {current === "Аналитика" ? <AdminAnalytics /> : null}
+        {current === "Нейросеть" ? <AdminAi /> : null}
       </div>
     </Shell>
   );
@@ -140,8 +145,7 @@ function Products() {
   const page = usePage(filtered, 8, `${query}|${onlyActive}|${categoryId}`);
 
   return (
-    <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
-      <div>
+    <div>
       <div className="mb-3 flex flex-wrap gap-2">
         <TextInput value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Поиск товара" aria-label="Поиск товара" className="max-w-xs" />
         <select className="h-11 rounded-md border border-line bg-surface px-3 text-sm" value={onlyActive} onChange={(event) => setOnlyActive(event.target.value as "all" | "yes" | "no")}>
@@ -155,26 +159,42 @@ function Products() {
             <option key={category.id} value={category.id}>{category.name}</option>
           ))}
         </select>
+        <Button variant="line" onClick={() => setDraft(emptyProduct())}>Новый товар</Button>
       </div>
+      {draft?.id === "new" ? <div className="mb-3 rounded-xl border-2 border-brand bg-brand-wash p-4 shadow-md">{productEditor()}</div> : null}
       <ul className="grid gap-3 sm:grid-cols-2">
-        {page.items.map((product) => (
-          <li key={product.id}>
-            <button type="button" onClick={() => setDraft(product)} className="flex w-full gap-3 rounded-xl border border-line bg-gradient-to-b from-surface to-card p-3 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-brand-mid hover:shadow-md">
-              <img src={product.image} alt="" className="size-16 rounded-lg object-cover" />
-              <span className="min-w-0">
-                <span className="block font-semibold">{product.title}</span>
-                <span className="mt-1 block text-xs text-muted">{categoryLabel(product.category, product.categoryName)}</span>
-                <span className="mt-1 block text-sm">{formatNumber(product.price)} апексов · {product.stock} шт.</span>
-                <span className={`mt-1 inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${product.active ? "bg-emerald-100 text-emerald-800" : "bg-card text-muted"}`}>{product.active ? "В каталоге" : "Скрыт"}</span>
-              </span>
-            </button>
-          </li>
-        ))}
+        {page.items.map((product) => {
+          const open = draft?.id === product.id;
+          return (
+            <li key={product.id} className={open ? "sm:col-span-2" : ""}>
+              <div className={open ? "rounded-xl border-2 border-brand bg-brand-wash p-3 shadow-md" : "rounded-xl border border-line bg-surface p-3 shadow-sm"}>
+                <div className="flex items-center gap-3">
+                  <img src={product.image} alt="" className="size-14 rounded-lg object-cover" />
+                  <div className="min-w-0 flex-1">
+                    <p className="font-semibold">{product.title}</p>
+                    <p className="text-xs text-muted">{categoryLabel(product.category, product.categoryName)}</p>
+                    <p className="text-sm">{formatNumber(product.price)} апексов · {product.stock} шт.</p>
+                  </div>
+                  <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${product.active ? "bg-emerald-100 text-emerald-800" : "bg-card text-muted"}`}>{product.active ? "В каталоге" : "Скрыт"}</span>
+                  <button type="button" className="grid size-10 place-items-center rounded-full border border-line hover:border-brand hover:text-brand" aria-label={`Редактировать ${product.title}`} onClick={() => setDraft(open ? null : product)}>
+                    <Pencil className="size-4" />
+                  </button>
+                </div>
+                {open ? <div className="mt-3 border-t border-line pt-3">{productEditor()}</div> : null}
+              </div>
+            </li>
+          );
+        })}
       </ul>
       <Pager page={page.page} pages={page.pages} total={page.total} onPage={page.setPage} />
-      </div>
+    </div>
+  );
+
+  function productEditor() {
+    if (!draft) return null;
+    return (
       <form
-        className="space-y-3 rounded-lg bg-card p-4"
+        className="grid gap-3 lg:grid-cols-2"
         onSubmit={(event) => {
           event.preventDefault();
           if (!draft || saving) return;
@@ -189,101 +209,69 @@ function Products() {
           });
         }}
       >
-        <div className="flex items-center justify-between">
-          <h2 className="font-bold">{draft ? "Карточка товара" : "Товар"}</h2>
-          <button type="button" className="text-sm font-semibold text-brand" onClick={() => setDraft(emptyProduct())}>
-            Новый
-          </button>
+        <Field label="Название">
+          <TextInput value={draft.title} onChange={(event) => setDraft({ ...draft, title: event.target.value })} />
+        </Field>
+        <Field label="Категория">
+          {categories.length === 0 ? (
+            <TextInput value={draft.category} inputMode="numeric" placeholder="id категории" onChange={(event) => setDraft({ ...draft, category: event.target.value })} />
+          ) : (
+            <select className="h-11 w-full rounded-md border border-line bg-surface px-3 text-sm" value={draft.category} onChange={(event) => setDraft({ ...draft, category: event.target.value })}>
+              <option value="">Без категории</option>
+              {categories.map((category) => (
+                <option key={category.id} value={category.id}>{category.name}</option>
+              ))}
+            </select>
+          )}
+        </Field>
+        <div className="lg:col-span-2">
+          <Field label="Описание">
+            <TextArea value={draft.description} onChange={(event) => setDraft({ ...draft, description: event.target.value })} />
+          </Field>
         </div>
-        {draft ? (
-          <>
-            <Field label="Название">
-              <TextInput value={draft.title} onChange={(event) => setDraft({ ...draft, title: event.target.value })} />
-            </Field>
-            <Field label="Описание">
-              <TextArea value={draft.description} onChange={(event) => setDraft({ ...draft, description: event.target.value })} />
-            </Field>
-            <Field label="Фото">
-              {draft.image.startsWith("http") ? (
-                <img src={draft.image} alt="" className="mb-2 h-24 w-24 rounded-md object-cover" />
-              ) : null}
-              <input
-                type="file"
-                accept="image/jpeg,image/png,image/webp"
-                className="block w-full text-sm"
-                disabled={uploading}
-                onChange={(event) => {
-                  const file = event.target.files?.[0];
-                  event.target.value = "";
-                  if (!file || !draft) return;
-                  setUploading(true);
-                  void uploadImage(file, "products").then((result) => {
-                    setUploading(false);
-                    if (!result.ok || !result.url) toast.error(result.ok ? "Сервер не вернул ссылку" : result.error);
-                    else setDraft({ ...draft, image: result.url });
-                  });
-                }}
-              />
-              <p className="mt-1 text-xs text-muted">{uploading ? "Загружаем фото…" : "JPEG, PNG или WebP, до 2 МБ."}</p>
-            </Field>
-            <Field label="Категория">
-              {categories.length === 0 ? (
-                <TextInput
-                  value={draft.category}
-                  inputMode="numeric"
-                  placeholder="id категории"
-                  onChange={(event) => setDraft({ ...draft, category: event.target.value })}
-                />
-              ) : (
-                <select
-                  className="h-11 w-full rounded-md border border-line bg-surface px-3 text-sm"
-                  value={draft.category}
-                  onChange={(event) => setDraft({ ...draft, category: event.target.value })}
-                >
-                  <option value="">Без категории</option>
-                  {categories.map((category) => (
-                    <option key={category.id} value={category.id}>
-                      {category.name}
-                    </option>
-                  ))}
-                </select>
-              )}
-            </Field>
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="Цена, апексы">
-                <TextInput
-                  inputMode="numeric"
-                  value={draft.price}
-                  onChange={(event) => setDraft({ ...draft, price: Number(event.target.value) })}
-                />
-              </Field>
-              <Field label="Остаток">
-                <TextInput
-                  inputMode="numeric"
-                  value={draft.stock}
-                  onChange={(event) => setDraft({ ...draft, stock: Number(event.target.value) })}
-                />
-              </Field>
-            </div>
-            <label className="flex min-h-11 items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={draft.active}
-                onChange={(event) => setDraft({ ...draft, active: event.target.checked })}
-              />
-              Показывать в каталоге
-            </label>
-            <Button type="submit" className="w-full" disabled={saving || uploading}>
-              {saving ? "Сохраняем…" : "Сохранить"}
-            </Button>
-            {draft.id !== "new" ? <ProductTools productId={draft.id} /> : null}
-          </>
-        ) : (
-          <p className="text-sm text-muted">Выберите товар или создайте новый.</p>
-        )}
+        <Field label="Фото">
+          {draft.image ? <img src={draft.image} alt="" className="mb-2 h-24 w-24 rounded-md object-cover" /> : null}
+          <label className="inline-flex min-h-11 cursor-pointer items-center rounded-md border border-line bg-surface px-4 text-sm font-semibold hover:border-brand-mid">
+            {uploading ? "Загружаем…" : "Выбрать файл"}
+            <input
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              className="sr-only"
+              disabled={uploading}
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                event.target.value = "";
+                if (!file || !draft) return;
+                setUploading(true);
+                void uploadImage(file, "products").then((result) => {
+                  setUploading(false);
+                  if (!result.ok || !result.url) toast.error(result.ok ? "Сервер не вернул ссылку" : result.error);
+                  else setDraft({ ...draft, image: result.url });
+                });
+              }}
+            />
+          </label>
+        </Field>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Цена, апексы">
+            <NumericInput value={draft.price} onChange={(price) => setDraft({ ...draft, price })} />
+          </Field>
+          <Field label="Остаток">
+            <NumericInput value={draft.stock} onChange={(stock) => setDraft({ ...draft, stock })} />
+          </Field>
+        </div>
+        <label className="flex min-h-11 items-center gap-2 text-sm lg:col-span-2">
+          <input type="checkbox" checked={draft.active} onChange={(event) => setDraft({ ...draft, active: event.target.checked })} />
+          Показывать в каталоге
+        </label>
+        <div className="flex flex-wrap gap-2 lg:col-span-2">
+          <Button type="submit" disabled={saving || uploading}>{saving ? "Сохраняем…" : "Сохранить"}</Button>
+          <Button type="button" variant="line" onClick={() => setDraft(null)}>Отмена</Button>
+        </div>
+        {draft.id !== "new" ? <div className="lg:col-span-2"><ProductTools productId={draft.id} /></div> : null}
       </form>
-    </div>
-  );
+    );
+  }
 }
 
 function Orders() {
@@ -295,6 +283,7 @@ function Orders() {
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("all");
   const [period, setPeriod] = useState("all");
+  const [sort, setSort] = useState<"new" | "old">("new");
   const filtered = orders.filter((order) => {
     const person = people.find((item) => item.id === order.userId);
     const text = `${person?.name ?? ""} ${order.items.map((item) => `${item.title} ${item.variantName ?? ""}`).join(" ")}`.toLowerCase();
@@ -306,8 +295,8 @@ function Orders() {
       if (!Number.isFinite(age) || age > limit) return false;
     }
     return true;
-  });
-  const page = usePage(filtered, 8, `${query}|${status}|${period}`);
+  }).sort((a, b) => (sort === "new" ? b.createdAt.localeCompare(a.createdAt) : a.createdAt.localeCompare(b.createdAt)));
+  const page = usePage(filtered, 8, `${query}|${status}|${period}|${sort}`);
   useEffect(() => {
     void loadAllOrders().catch((reason: unknown) => {
       setError(reason instanceof Error ? reason.message : "Не удалось загрузить заказы");
@@ -330,6 +319,10 @@ function Orders() {
           <option value="1">Сегодня</option>
           <option value="7">7 дней</option>
           <option value="30">30 дней</option>
+        </select>
+        <select className="h-11 rounded-md border border-line bg-surface px-3 text-sm" value={sort} onChange={(event) => setSort(event.target.value as "new" | "old")} aria-label="Сортировка заказов">
+          <option value="new">Сначала новые</option>
+          <option value="old">Сначала старые</option>
         </select>
       </div>
       <ul className="space-y-3">
@@ -419,7 +412,7 @@ function People() {
     <div>
       {canCreate ? (
       <form
-        className="mb-4 grid gap-3 rounded-lg bg-card p-4 sm:grid-cols-2"
+        className="mb-4 grid gap-3 rounded-xl border-2 border-brand bg-brand-wash p-4 shadow-md sm:grid-cols-2"
         onSubmit={(event) => {
           event.preventDefault();
           setPending(true);
@@ -455,14 +448,31 @@ function People() {
         </Field>
         <OptionField label="Отдел" value={department} options={[...new Set(people.map((person) => person.department.trim()).filter(Boolean))].sort()} onChange={setDepartment} />
         <OptionField label="Должность" value={position} options={[...new Set(people.map((person) => person.position.trim()).filter(Boolean))].sort()} onChange={setPosition} />
-        <Button type="submit" disabled={pending} className="sm:col-span-2 sm:w-auto">
-          Создать
-        </Button>
+        <div className="flex flex-wrap gap-2 sm:col-span-2">
+          <Button type="submit" disabled={pending} className="sm:w-auto">
+            Создать
+          </Button>
+          <Button
+            type="button"
+            variant="line"
+            onClick={() => {
+              setEmail("");
+              setPassword("");
+              setFirstName("");
+              setLastName("");
+              setMiddleName("");
+              setDepartment("");
+              setPosition("");
+            }}
+          >
+            Отмена
+          </Button>
+        </div>
       </form>
       ) : null}
       {editing ? (
         <form
-          className="mb-4 grid gap-3 rounded-lg bg-card p-4 sm:grid-cols-2"
+          className="mb-4 grid gap-3 rounded-xl border-2 border-brand bg-brand-wash p-4 shadow-md sm:grid-cols-2"
           onSubmit={(event) => {
             event.preventDefault();
             void updateEmployee(edit).then((result) => {
@@ -638,7 +648,7 @@ function Economy() {
     });
   }, [loadAllLedger]);
   return (
-    <div className="grid items-start gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">
+    <div className="space-y-4">
       <form
         className="space-y-3 rounded-lg bg-card p-4"
         onSubmit={(event) => {
@@ -681,14 +691,27 @@ function Economy() {
           </select>
         </Field>
         <Field label="Сумма" hint="Отрицательная списывает апексы. Баланс ниже нуля невозможен.">
-          <TextInput inputMode="numeric" value={amount} onChange={(event) => setAmount(Number(event.target.value))} />
+          <NumericInput value={amount} onChange={setAmount} />
         </Field>
         <Field label="Причина">
           <TextInput value={reason} onChange={(event) => setReason(event.target.value)} placeholder="За что корректировка" />
         </Field>
-        <Button type="submit" className="w-full" disabled={adjusting}>
-          {adjusting ? "Проводим…" : "Провести"}
-        </Button>
+        <div className="flex gap-2">
+          <Button type="submit" className="w-full" disabled={adjusting}>
+            {adjusting ? "Проводим…" : "Провести"}
+          </Button>
+          <Button
+            type="button"
+            variant="line"
+            onClick={() => {
+              setAmount(100);
+              setReason("");
+              setBalanceType("Personal");
+            }}
+          >
+            Отмена
+          </Button>
+        </div>
       </form>
       <div>
         {error ? <p className="mb-3 text-sm text-danger">{error}</p> : null}

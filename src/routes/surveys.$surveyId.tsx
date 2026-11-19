@@ -56,20 +56,24 @@ function SurveyPage() {
     <Shell>
       <p className="text-xs font-semibold text-brand">Опрос</p>
       <h1 className="mt-1 text-3xl font-bold tracking-tight">{survey.title}</h1>
-      {survey.description ? <p className="mt-2 max-w-2xl text-sm text-muted">{survey.description}</p> : null}
+      {survey.description ? <p className="mt-2 text-sm text-muted">{survey.description}</p> : null}
       <p className="mt-2 text-sm text-muted">{survey.reward > 0 ? `Награда ${formatPoints(survey.reward)}` : "Без награды"}</p>
-      <Panel className="mt-5 max-w-2xl">
+      <Panel className="mt-4">
         {survey.questions.length === 0 ? <p className="text-sm text-muted">Вопросов пока нет.</p> : null}
         {locked ? <p className="text-sm text-muted">Ответ уже отправлен.</p> : null}
         {!locked ? (
-          <div className="space-y-5">
+          <div className="grid gap-4 md:grid-cols-2">
             {survey.questions.map((question) => (
-              <Question key={question.id} question={question} value={values[question.id]} onChange={(value) => setValues((current) => ({ ...current, [question.id]: value }))} />
+              <div key={question.id} className={question.type === "text" ? "md:col-span-2" : ""}>
+                <Question question={question} value={values[question.id]} onChange={(value) => setValues((current) => ({ ...current, [question.id]: value }))} />
+              </div>
             ))}
             {survey.questions.length > 0 ? (
-              <Button disabled={busy} onClick={() => void send()}>
-                {busy ? "Отправляем…" : "Отправить ответы"}
-              </Button>
+              <div className="md:col-span-2">
+                <Button disabled={busy} onClick={() => void send()}>
+                  {busy ? "Отправляем…" : "Отправить ответы"}
+                </Button>
+              </div>
             ) : null}
           </div>
         ) : null}
@@ -94,7 +98,11 @@ function Question({ question, value, onChange }: { question: SurveyQuestionView;
         <TextArea className="mt-2 min-h-16" value={typeof value === "string" ? value : ""} onChange={(event) => onChange(event.target.value)} />
       ) : null}
       {question.type === "number" ? (
-        <TextInput className="mt-2 max-w-40" inputMode="numeric" value={value == null ? "" : String(value)} onChange={(event) => onChange(event.target.value === "" ? "" : Number(event.target.value))} />
+        <TextInput className="mt-2 w-full" inputMode="decimal" value={value == null || Number.isNaN(value) ? "" : String(value)} onChange={(event) => {
+          const raw = event.target.value.replace(",", ".");
+          if (raw === "") onChange("");
+          else if (/^-?\d*\.?\d*$/.test(raw)) onChange(raw.endsWith(".") || raw === "-" ? raw : Number(raw));
+        }} />
       ) : null}
       {question.type === "boolean" ? (
         <div className="mt-2 flex gap-4 text-sm">

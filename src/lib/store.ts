@@ -215,7 +215,7 @@ export interface AppState {
   categories: CategoryRow[];
   roleCatalog: RoleOption[];
   leaderboard: BoardRow[];
-  leaderboardKind: "activity" | "thanks";
+  leaderboardKind: "level" | "thanks";
   departmentIds: string[];
   rewardBalance: number | null;
   apiWarnings: string[];
@@ -1005,6 +1005,10 @@ export const useStore = create<AppState & Actions>()(
         }
       },
       setTicketStatus: async (ticketId, status) => {
+        const ticket = get().tickets.find((item) => item.id === ticketId);
+        const me = get().currentUserId;
+        if (!ticket?.assignedTo) return { ok: false as const, error: "Сначала возьмите обращение — пока его никто не ведёт" };
+        if (ticket.assignedTo !== me) return { ok: false as const, error: "Статус меняет только тот, кто взял обращение" };
         try {
           await apex(`/api/support/tickets/${ticketId}/status`, {
             method: "PATCH",
@@ -1049,7 +1053,8 @@ export const useStore = create<AppState & Actions>()(
         const data = await apex("/api/orders/all");
         const orders = listOf(data)
           .map((item) => mapOrder(item, ""))
-          .filter((item): item is Order => Boolean(item));
+          .filter((item): item is Order => Boolean(item))
+          .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
         set({ allOrders: orders });
       },
       loadAllLedger: async () => {

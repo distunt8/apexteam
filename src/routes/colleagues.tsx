@@ -165,7 +165,7 @@ function ColleaguesPage() {
             </p>
           )}
           <label className="mt-4 block text-sm font-medium">
-            Сообщение (необязательно)
+            Сообщение
             <TextArea
               value={message}
               maxLength={120}

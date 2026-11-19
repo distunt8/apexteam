@@ -16,7 +16,7 @@ import { Route as CartRouteImport } from './routes/cart'
 import { Route as CatalogRouteImport } from './routes/catalog'
 import { Route as ColleaguesRouteImport } from './routes/colleagues'
 import { Route as HistoryRouteImport } from './routes/history'
-import { Route as MyActivityRouteImport } from './routes/my-activity'
+import { Route as NewsRouteImport } from './routes/news'
 import { Route as NotificationsRouteImport } from './routes/notifications'
 import { Route as OrdersRouteImport } from './routes/orders'
 import { Route as ProfileRouteImport } from './routes/profile'
@@ -60,9 +60,9 @@ const HistoryRoute = HistoryRouteImport.update({
   path: '/history',
   getParentRoute: () => rootRouteImport,
 } as any)
-const MyActivityRoute = MyActivityRouteImport.update({
-  id: '/my-activity',
-  path: '/my-activity',
+const NewsRoute = NewsRouteImport.update({
+  id: '/news',
+  path: '/news',
   getParentRoute: () => rootRouteImport,
 } as any)
 const NotificationsRoute = NotificationsRouteImport.update({
@@ -109,7 +109,7 @@ export interface FileRoutesByFullPath {
   '/catalog': typeof CatalogRoute
   '/colleagues': typeof ColleaguesRoute
   '/history': typeof HistoryRoute
-  '/my-activity': typeof MyActivityRoute
+  '/news': typeof NewsRoute
   '/notifications': typeof NotificationsRoute
   '/orders': typeof OrdersRoute
   '/profile': typeof ProfileRoute
@@ -126,7 +126,7 @@ export interface FileRoutesByTo {
   '/catalog': typeof CatalogRoute
   '/colleagues': typeof ColleaguesRoute
   '/history': typeof HistoryRoute
-  '/my-activity': typeof MyActivityRoute
+  '/news': typeof NewsRoute
   '/notifications': typeof NotificationsRoute
   '/orders': typeof OrdersRoute
   '/profile': typeof ProfileRoute
@@ -144,7 +144,7 @@ export interface FileRoutesById {
   '/catalog': typeof CatalogRoute
   '/colleagues': typeof ColleaguesRoute
   '/history': typeof HistoryRoute
-  '/my-activity': typeof MyActivityRoute
+  '/news': typeof NewsRoute
   '/notifications': typeof NotificationsRoute
   '/orders': typeof OrdersRoute
   '/profile': typeof ProfileRoute
@@ -163,7 +163,7 @@ export interface FileRouteTypes {
     | '/catalog'
     | '/colleagues'
     | '/history'
-    | '/my-activity'
+    | '/news'
     | '/notifications'
     | '/orders'
     | '/profile'
@@ -180,7 +180,7 @@ export interface FileRouteTypes {
     | '/catalog'
     | '/colleagues'
     | '/history'
-    | '/my-activity'
+    | '/news'
     | '/notifications'
     | '/orders'
     | '/profile'
@@ -197,7 +197,7 @@ export interface FileRouteTypes {
     | '/catalog'
     | '/colleagues'
     | '/history'
-    | '/my-activity'
+    | '/news'
     | '/notifications'
     | '/orders'
     | '/profile'
@@ -215,7 +215,7 @@ export interface RootRouteChildren {
   CatalogRoute: typeof CatalogRoute
   ColleaguesRoute: typeof ColleaguesRoute
   HistoryRoute: typeof HistoryRoute
-  MyActivityRoute: typeof MyActivityRoute
+  NewsRoute: typeof NewsRoute
   NotificationsRoute: typeof NotificationsRoute
   OrdersRoute: typeof OrdersRoute
   ProfileRoute: typeof ProfileRoute
@@ -276,11 +276,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof HistoryRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/my-activity': {
-      id: '/my-activity'
-      path: '/my-activity'
-      fullPath: '/my-activity'
-      preLoaderRoute: typeof MyActivityRouteImport
+    '/news': {
+      id: '/news'
+      path: '/news'
+      fullPath: '/news'
+      preLoaderRoute: typeof NewsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/notifications': {
@@ -343,7 +343,7 @@ const rootRouteChildren: RootRouteChildren = {
   CatalogRoute: CatalogRoute,
   ColleaguesRoute: ColleaguesRoute,
   HistoryRoute: HistoryRoute,
-  MyActivityRoute: MyActivityRoute,
+  NewsRoute: NewsRoute,
   NotificationsRoute: NotificationsRoute,
   OrdersRoute: OrdersRoute,
   ProfileRoute: ProfileRoute,

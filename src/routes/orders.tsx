@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { useState } from "react";
 import { Pager, usePage } from "@/components/pager";
 import { Shell } from "@/components/shell";
 import { Panel } from "@/components/ui";
@@ -12,12 +13,27 @@ function OrdersPage() {
   const userId = useStore((state) => state.currentUserId);
   const allOrders = useStore((state) => state.orders);
   const orders = allOrders.filter((order) => order.userId === userId);
-  const page = usePage(orders, 6);
+  const [sort, setSort] = useState<"new" | "old">("new");
+  const ordered = [...orders].sort((a, b) =>
+    sort === "new" ? b.createdAt.localeCompare(a.createdAt) : a.createdAt.localeCompare(b.createdAt),
+  );
+  const page = usePage(ordered, 6, sort);
 
   return (
     <Shell mode="shop">
       <h1 className="text-3xl font-bold tracking-tight">Мои заказы</h1>
       <p className="mt-2 text-sm text-muted">Отмену делает администратор или мерчендайзер: апексы возвращаются на баланс.</p>
+      <label className="mt-4 block text-sm text-muted">
+        <span className="sr-only">Сортировка заказов</span>
+        <select
+          value={sort}
+          onChange={(event) => setSort(event.target.value as "new" | "old")}
+          className="h-11 rounded-md border border-line bg-surface px-3 text-sm text-ink"
+        >
+          <option value="new">Сначала новые</option>
+          <option value="old">Сначала старые</option>
+        </select>
+      </label>
       {orders.length === 0 ? (
         <p className="mt-8 text-sm text-muted">Заказов пока нет.</p>
       ) : (

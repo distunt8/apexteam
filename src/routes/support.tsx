@@ -70,9 +70,22 @@ function SupportPage() {
         <Field label="Описание">
           <TextArea value={text} onChange={(event) => setText(event.target.value)} placeholder="Что произошло и чем помочь" />
         </Field>
-        <Button type="submit" className="w-full sm:w-auto" disabled={pending}>
-          Отправить обращение
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button type="submit" className="w-full sm:w-auto" disabled={pending}>
+            Отправить обращение
+          </Button>
+          <Button
+            type="button"
+            variant="line"
+            className="w-full sm:w-auto"
+            onClick={() => {
+              setSubject("");
+              setText("");
+            }}
+          >
+            Отмена
+          </Button>
+        </div>
       </form>
 
       <div className="mt-6 grid items-start gap-4 lg:grid-cols-[260px_minmax(0,1fr)]">
@@ -90,7 +103,7 @@ function SupportPage() {
                 <span className="mt-1 block text-xs text-muted">
                   {staff ? `${ticket.userName || "Сотрудник"} · ` : ""}
                   {TICKET_STATUS[ticket.status]}
-                  {ticket.assignedName ? ` · ${ticket.assignedName}` : ""}
+                  {ticket.assignedName ? ` · ведёт ${ticket.assignedName}` : " · никто не взял"}
                 </span>
               </button>
             </li>
@@ -103,26 +116,32 @@ function SupportPage() {
             <h2 className="font-bold">{current.subject}</h2>
             <p className="mt-1 text-xs text-muted">
               {current.userName || "Сотрудник"} · {TICKET_STATUS[current.status]}
-              {current.assignedName ? ` · ведёт ${current.assignedName}` : staff ? " · не назначено" : ""}
+              {current.assignedTo ? ` · ведёт ${current.assignedName || "сотрудник"}` : " · никто не взял"}
             </p>
             {staff ? (
               <div className="mt-3 flex flex-wrap items-center gap-2">
-                <select
-                  className="h-10 rounded-md border border-line bg-surface px-2 text-sm"
-                  value={current.status}
-                  onChange={(event) => {
-                    const status = event.target.value as TicketStatus;
-                    void setStatus(current.id, status).then((result) => {
-                      if (!result.ok) toast.error(result.error);
-                    });
-                  }}
-                >
-                  {(Object.keys(TICKET_STATUS) as TicketStatus[]).map((status) => (
-                    <option key={status} value={status}>
-                      {TICKET_STATUS[status]}
-                    </option>
-                  ))}
-                </select>
+                {current.assignedTo === user.id ? (
+                  <select
+                    className="h-10 rounded-md border border-line bg-surface px-2 text-sm"
+                    value={current.status}
+                    onChange={(event) => {
+                      const status = event.target.value as TicketStatus;
+                      void setStatus(current.id, status).then((result) => {
+                        if (!result.ok) toast.error(result.error);
+                      });
+                    }}
+                  >
+                    {(Object.keys(TICKET_STATUS) as TicketStatus[]).map((status) => (
+                      <option key={status} value={status}>
+                        {TICKET_STATUS[status]}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <p className="text-sm text-muted">
+                    {current.assignedTo ? "Статус меняет тот, кто ведёт обращение." : "Статус появится, когда кто-то возьмёт обращение."}
+                  </p>
+                )}
                 {current.assignedTo === user.id ? (
                   <Button
                     variant="line"

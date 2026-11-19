@@ -1,7 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { Pencil } from "lucide-react";
 import { toast } from "sonner";
-import { Button } from "@/components/ui";
 import { cn } from "@/lib/cn";
 import { initials } from "@/lib/format";
 import { useStore, type Person } from "@/lib/store";
@@ -38,115 +37,66 @@ export function UserAvatar({
   );
 }
 
-export function AvatarEditor({ user, compact = false }: { user: Person; compact?: boolean }) {
+export function AvatarEditor({ user }: { user: Person }) {
   const upload = useStore((state) => state.uploadAvatar);
   const input = useRef<HTMLInputElement>(null);
   const generation = useRef(0);
-  const [file, setFile] = useState<File | null>(null);
-  const [preview, setPreview] = useState<string>();
   const [pending, setPending] = useState(false);
-  useEffect(() => {
-    if (!file) {
-      setPreview(undefined);
-      return;
-    }
-    const url = URL.createObjectURL(file);
-    setPreview(url);
-    return () => URL.revokeObjectURL(url);
-  }, [file]);
-  useEffect(
-    () => () => {
-      generation.current++;
-    },
-    [],
-  );
   return (
-    <div className="flex flex-wrap items-center gap-3">
-      <UserAvatar user={user} src={preview ?? user.avatarUrl} className="size-16 text-base" />
-      <div className="space-y-1">
-        <input
-          ref={input}
-          type="file"
-          accept="image/jpeg,image/png,image/webp"
-          className="sr-only"
-          aria-label={`Выбрать фото: ${user.name}`}
-          disabled={pending}
-          onChange={async (event) => {
-            const selected = event.target.files?.[0];
-            event.target.value = "";
-            const attempt = ++generation.current;
-            if (!selected) return;
-            if (selected.size > 2 * 1024 * 1024) {
-              toast.error("Фото должно быть не больше 2 МБ");
+    <div className="relative w-fit">
+      <UserAvatar user={user} className="size-28 text-2xl" />
+      <input
+        ref={input}
+        type="file"
+        accept="image/jpeg,image/png,image/webp"
+        className="sr-only"
+        aria-label={`Выбрать фото: ${user.name}`}
+        disabled={pending}
+        onChange={async (event) => {
+          const selected = event.target.files?.[0];
+          event.target.value = "";
+          const attempt = ++generation.current;
+          if (!selected) return;
+          if (selected.size > 2 * 1024 * 1024) {
+            toast.error("Фото должно быть не больше 2 МБ");
+            return;
+          }
+          if (!["image/jpeg", "image/png", "image/webp"].includes(selected.type)) {
+            toast.error("Выберите JPEG, PNG или WebP");
+            return;
+          }
+          try {
+            const bitmap = await createImageBitmap(selected);
+            const valid = bitmap.width <= 8192 && bitmap.height <= 8192;
+            bitmap.close();
+            if (!valid) {
+              toast.error("Размер фото — не более 8192 × 8192 пикселей");
               return;
             }
-            if (!["image/jpeg", "image/png", "image/webp"].includes(selected.type)) {
-              toast.error("Выберите JPEG, PNG или WebP");
-              return;
-            }
-            try {
-              const bitmap = await createImageBitmap(selected);
-              const valid = bitmap.width <= 8192 && bitmap.height <= 8192;
-              bitmap.close();
-              if (!valid) {
-                toast.error("Размер фото — не более 8192 × 8192 пикселей");
-                return;
-              }
-              if (attempt === generation.current) setFile(selected);
-            } catch {
-              toast.error("Не удалось открыть изображение. Выберите другое фото.");
-            }
-          }}
-        />
-        <div className="flex flex-wrap gap-1">
-          <button
-            type="button"
-            className="grid size-9 place-items-center rounded-full border border-line bg-surface text-ink shadow-sm transition hover:border-brand hover:text-brand"
-            aria-label="Изменить фото"
-            disabled={pending}
-            onClick={() => input.current?.click()}
-          >
-            <Pencil className="size-4" />
-          </button>
-          {file ? (
-            <>
-              <Button
-                disabled={pending}
-                onClick={async () => {
-                  setPending(true);
-                  try {
-                    const result = await upload(user.id, file);
-                    if (!result.ok) toast.error(result.error);
-                    else {
-                      setFile(null);
-                      toast.success("Фото сохранено");
-                    }
-                  } finally {
-                    setPending(false);
-                  }
-                }}
-              >
-                {pending ? "Сохраняем…" : "Сохранить фото"}
-              </Button>
-              <Button
-                variant="ghost"
-                disabled={pending}
-                onClick={() => {
-                  generation.current++;
-                  setFile(null);
-                }}
-              >
-                Отмена
-              </Button>
-            </>
-          ) : null}
-        </div>
-        {!compact ? (
-          <p className="text-xs text-muted" aria-live="polite">
-            {file ? "Предпросмотр. Нажмите «Сохранить фото»." : "JPEG, PNG или WebP, до 2 МБ"}
-          </p>
-        ) : null}
-      </div>
+          } catch {
+            toast.error("Не удалось открыть изображение. Выберите другое фото.");
+            return;
+          }
+          if (attempt !== generation.current) return;
+          setPending(true);
+          try {
+            const result = await upload(user.id, selected);
+            if (!result.ok) toast.error(result.error);
+            else toast.success("Фото сохранено");
+          } finally {
+            if (attempt === generation.current) setPending(false);
+          }
+        }}
+      />
+      <button
+        type="button"
+        className="absolute right-0 bottom-0 grid size-9 place-items-center rounded-full border border-line bg-surface text-ink shadow-sm hover:border-brand hover:text-brand disabled:opacity-60"
+        aria-label="Изменить фото"
+        disabled={pending}
+        onClick={() => input.current?.click()}
+      >
+        <Pencil className="size-4" />
+      </button>
     </div>
   );
 }

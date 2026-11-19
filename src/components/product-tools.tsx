@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { Button, Field, TextArea, TextInput } from "@/components/ui";
+import { Button, Field, NumericInput, TextArea, TextInput } from "@/components/ui";
 import { apex } from "@/lib/apex";
+import { useStore } from "@/lib/store";
 
 type Row = Record<string, unknown>;
 
@@ -14,6 +15,7 @@ export function ProductTools({ productId }: { productId: string }) {
   const [variants, setVariants] = useState<Row[]>([]);
   const [categories, setCategories] = useState<Row[]>([]);
   const [badges, setBadges] = useState<Row[]>([]);
+  const [assigned, setAssigned] = useState<Row[]>([]);
   const [discounts, setDiscounts] = useState<Row[]>([]);
   const [name, setName] = useState("");
   const [price, setPrice] = useState("0");
@@ -22,18 +24,21 @@ export function ProductTools({ productId }: { productId: string }) {
   const [categoryName, setCategoryName] = useState("");
   const [badgeName, setBadgeName] = useState("");
   const [badgeColor, setBadgeColor] = useState("#306cc0");
-  const [discount, setDiscount] = useState("10");
+  const [discount, setDiscount] = useState(10);
+  const reloadCatalog = useStore((state) => state.refresh);
 
   async function reload() {
-    const [variantRows, categoryRows, badgeRows, discountRows] = await Promise.all([
+    const [variantRows, categoryRows, badgeRows, assignedRows, discountRows] = await Promise.all([
       apex(`/api/products/${productId}/variants`).catch(() => []),
       apex("/api/products/variant-categories").catch(() => []),
       apex("/api/badges").catch(() => []),
+      apex(`/api/products/${productId}/badges`).catch(() => []),
       apex(`/api/products/${productId}/discounts`).catch(() => []),
     ]);
     setVariants(list(variantRows));
     setCategories(list(categoryRows));
     setBadges(list(badgeRows));
+    setAssigned(list(assignedRows));
     setDiscounts(list(discountRows));
   }
 
@@ -56,8 +61,8 @@ export function ProductTools({ productId }: { productId: string }) {
       <div className="grid gap-2">
         <TextInput value={name} onChange={(event) => setName(event.target.value)} placeholder="Название варианта" />
         <div className="grid grid-cols-2 gap-2">
-          <TextInput value={price} onChange={(event) => setPrice(event.target.value)} placeholder="Цена" />
-          <TextInput value={stock} onChange={(event) => setStock(event.target.value)} placeholder="Остаток" />
+          <NumericInput value={Number(price) || 0} onChange={(value) => setPrice(String(value))} placeholder="Цена" />
+          <NumericInput value={Number(stock) || 0} onChange={(value) => setStock(String(value))} placeholder="Остаток" />
         </div>
         <select className="h-11 rounded-md border border-line bg-surface px-3 text-sm" value={categoryId} onChange={(event) => setCategoryId(event.target.value)}>
           <option value="">Без категории</option>
@@ -65,22 +70,39 @@ export function ProductTools({ productId }: { productId: string }) {
             <option key={String(item.id)} value={String(item.id)}>{String(item.name)}</option>
           ))}
         </select>
-        <Button
-          variant="line"
-          onClick={() => {
-            void apex(`/api/products/${productId}/variants`, {
-              method: "POST",
-              body: JSON.stringify({ name, categoryId: categoryId ? Number(categoryId) : null, price: Number(price), stock: Number(stock) }),
-            }).then(() => {
+        <div className="flex flex-wrap gap-2">
+          <Button
+            variant="line"
+            onClick={() => {
+              void apex(`/api/products/${productId}/variants`, {
+                method: "POST",
+                body: JSON.stringify({ name, categoryId: categoryId ? Number(categoryId) : null, price: Number(price), stock: Number(stock) }),
+              }).then(() => {
+                setName("");
+                setPrice("0");
+                setStock("1");
+                setCategoryId("");
+                toast.success("Вариант создан");
+                return reload();
+              }).catch((error: unknown) => toast.error(error instanceof Error ? error.message : "Не получилось"));
+            }}
+          >
+            Добавить вариант
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={() => {
               setName("");
-              toast.success("Вариант создан");
-              return reload();
-            }).catch((error: unknown) => toast.error(error instanceof Error ? error.message : "Не получилось"));
-          }}
-        >
-          Добавить вариант
-        </Button>
-        <div className="flex gap-2">
+              setPrice("0");
+              setStock("1");
+              setCategoryId("");
+            }}
+          >
+            Отмена
+          </Button>
+        </div>
+        <div className="flex flex-wrap gap-2">
           <TextInput value={categoryName} onChange={(event) => setCategoryName(event.target.value)} placeholder="Новая категория вариантов" />
           <Button
             variant="line"
@@ -96,28 +118,68 @@ export function ProductTools({ productId }: { productId: string }) {
           >
             Создать
           </Button>
+          <Button type="button" variant="ghost" onClick={() => setCategoryName("")}>Отмена</Button>
         </div>
       </div>
       <h3 className="font-bold">Бейджи и скидки</h3>
       <ul className="space-y-1 text-sm">
-        {badges.map((item) => (
-          <li key={String(item.id)} className="flex items-center justify-between gap-2">
-            <span className="rounded-full px-2 py-0.5 text-xs font-semibold text-white" style={{ background: String(item.color || "#306cc0") }}>{String(item.name)}</span>
+        {assigned.length === 0 ? <li className="text-muted">На товаре бейджей нет.</li> : null}
+        {assigned.map((item) => (
+          <li key={`a-${String(item.id)}`} className="flex items-center justify-between gap-2">
+            <span>{String(item.name || item.badgeName || "Бейдж")}</span>
             <button
               type="button"
-              className="text-xs font-semibold text-brand"
+              className="text-xs font-semibold text-danger"
               onClick={() => {
-                void apex(`/api/products/${productId}/badges`, { method: "POST", body: JSON.stringify({ badgeId: Number(item.id) }) })
-                  .then(() => toast.success("Бейдж назначен"))
+                void apex(`/api/products/${productId}/badges/${item.id}`, { method: "DELETE" })
+                  .then(() => {
+                    toast.success("Бейдж снят с товара");
+                    return reload();
+                  })
                   .catch((error: unknown) => toast.error(error instanceof Error ? error.message : "Не получилось"));
               }}
             >
-              Назначить
+              Снять
             </button>
           </li>
         ))}
+        {badges.map((item) => (
+          <li key={String(item.id)} className="flex flex-wrap items-center justify-between gap-2">
+            <span className="rounded-full px-2 py-0.5 text-xs font-semibold text-white" style={{ background: /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(String(item.color || "")) ? String(item.color) : "#306cc0" }}>{String(item.name)}</span>
+            <span className="flex gap-2">
+              <button
+                type="button"
+                className="text-xs font-semibold text-brand"
+                onClick={() => {
+                  void apex(`/api/products/${productId}/badges`, { method: "POST", body: JSON.stringify({ badgeId: Number(item.id) }) })
+                    .then(() => {
+                      toast.success("Бейдж назначен этому товару");
+                      return reload();
+                    })
+                    .catch((error: unknown) => toast.error(error instanceof Error ? error.message : "Не получилось"));
+                }}
+              >
+                Назначить
+              </button>
+              <button
+                type="button"
+                className="text-xs font-semibold text-danger"
+                onClick={() => {
+                  void apex(`/api/badges/${item.id}`, { method: "DELETE" })
+                    .then(() => {
+                      toast.success("Бейдж удалён");
+                      return reload();
+                    })
+                    .catch((error: unknown) => toast.error(error instanceof Error ? error.message : "Не получилось"));
+                }}
+              >
+                Удалить
+              </button>
+            </span>
+          </li>
+        ))}
       </ul>
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2">
         <TextInput value={badgeName} onChange={(event) => setBadgeName(event.target.value)} placeholder="Новый бейдж" />
         <input aria-label="Цвет бейджа" type="color" value={badgeColor} onChange={(event) => setBadgeColor(event.target.value)} className="size-11" />
         <Button
@@ -133,36 +195,81 @@ export function ProductTools({ productId }: { productId: string }) {
             }).catch((error: unknown) => toast.error(error instanceof Error ? error.message : "Не получилось"));
           }}
         >
-          Бейдж
+          Сохранить бейдж
+        </Button>
+        <Button
+          variant="ghost"
+          onClick={() => {
+            setBadgeName("");
+            setBadgeColor("#306cc0");
+          }}
+        >
+          Отмена
         </Button>
       </div>
-      <p className="text-sm text-muted">Скидки: {discounts.map((item) => `${item.discountPercent}%`).join(", ") || "нет"}</p>
+      <ul className="space-y-1 text-sm">
+        {discounts.length === 0 ? <li className="text-muted">Скидок у этого товара нет.</li> : null}
+        {discounts.map((item) => (
+          <li key={String(item.id)} className="flex items-center justify-between gap-2">
+            <span>{String(item.discountPercent)}%{item.productVariantId ? ` · вариант ${String(item.productVariantId)}` : ""}</span>
+            <button
+              type="button"
+              className="text-xs font-semibold text-danger"
+              onClick={() => {
+                void apex(`/api/discounts/${item.id}`, { method: "DELETE" })
+                  .then(() => {
+                    toast.success("Скидка удалена");
+                    return Promise.all([reload(), reloadCatalog()]);
+                  })
+                  .catch((error: unknown) => toast.error(error instanceof Error ? error.message : "Не получилось"));
+              }}
+            >
+              Удалить скидку
+            </button>
+          </li>
+        ))}
+      </ul>
       <div className="flex gap-2">
-        <TextInput value={discount} onChange={(event) => setDiscount(event.target.value)} placeholder="Процент" />
+        <NumericInput value={discount} onChange={setDiscount} placeholder="Процент" />
         <Button
           variant="line"
           onClick={() => {
             void apex(`/api/products/${productId}/discounts`, {
               method: "POST",
-              body: JSON.stringify({ discountPercent: Number(discount), startsAt: new Date().toISOString(), isActive: true }),
+              body: JSON.stringify({
+                discountPercent: discount,
+                startsAt: new Date().toISOString(),
+                isActive: true,
+              }),
             }).then(() => {
-              toast.success("Скидка сохранена");
-              return reload();
+              toast.success("Скидка сохранена только для этого товара");
+              return Promise.all([reload(), reloadCatalog()]);
             }).catch((error: unknown) => toast.error(error instanceof Error ? error.message : "Не получилось"));
           }}
         >
-          Скидка
+          Сохранить скидку
         </Button>
+        <Button type="button" variant="ghost" onClick={() => setDiscount(10)}>Отмена</Button>
       </div>
     </div>
   );
 }
 
 export function NewsDesk() {
+  const uploadImage = useStore((state) => state.uploadImage);
   const [title, setTitle] = useState("");
   const [summary, setSummary] = useState("");
   const [content, setContent] = useState("");
+  const [imageUrl, setImageUrl] = useState("");
+  const [uploading, setUploading] = useState(false);
   const [items, setItems] = useState<Row[]>([]);
+
+  function clear() {
+    setTitle("");
+    setSummary("");
+    setContent("");
+    setImageUrl("");
+  }
 
   function load() {
     void apex("/api/company-news?page=1&pageSize=20").then((data) => setItems(list(data))).catch(() => setItems([]));
@@ -174,14 +281,15 @@ export function NewsDesk() {
   return (
     <div className="grid gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">
       <form
-        className="space-y-3 rounded-xl border border-line bg-surface p-4 shadow-sm"
+        className="space-y-3 rounded-xl border-2 border-brand bg-brand-wash p-4 shadow-md"
         onSubmit={(event) => {
           event.preventDefault();
-          void apex("/api/company-news", { method: "POST", body: JSON.stringify({ title, summary, content }) })
+          void apex("/api/company-news", {
+            method: "POST",
+            body: JSON.stringify({ title, summary, content, imageUrl: imageUrl || null }),
+          })
             .then(() => {
-              setTitle("");
-              setSummary("");
-              setContent("");
+              clear();
               toast.success("Новость опубликована");
               load();
             })
@@ -192,7 +300,33 @@ export function NewsDesk() {
         <Field label="Заголовок"><TextInput value={title} onChange={(event) => setTitle(event.target.value)} required /></Field>
         <Field label="Коротко"><TextInput value={summary} onChange={(event) => setSummary(event.target.value)} /></Field>
         <Field label="Текст"><TextArea value={content} onChange={(event) => setContent(event.target.value)} /></Field>
-        <Button type="submit">Опубликовать</Button>
+        <Field label="Обложка">
+          {imageUrl ? <img src={imageUrl} alt="" className="mb-2 aspect-[16/9] w-full rounded-md object-cover" /> : null}
+          <label className="inline-flex min-h-11 cursor-pointer items-center rounded-md border border-line bg-surface px-4 text-sm font-semibold hover:border-brand-mid">
+            {uploading ? "Загружаем…" : "Выбрать файл"}
+            <input
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              className="sr-only"
+              disabled={uploading}
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                event.target.value = "";
+                if (!file) return;
+                setUploading(true);
+                void uploadImage(file, "products").then((result) => {
+                  setUploading(false);
+                  if (!result.ok || !result.url) toast.error(result.ok ? "Сервер не вернул ссылку" : result.error);
+                  else setImageUrl(result.url);
+                });
+              }}
+            />
+          </label>
+        </Field>
+        <div className="flex flex-wrap gap-2">
+          <Button type="submit" disabled={uploading}>Опубликовать</Button>
+          <Button type="button" variant="line" onClick={clear}>Отмена</Button>
+        </div>
       </form>
       <ul className="space-y-2">
         {items.map((item) => (

@@ -19,10 +19,11 @@ function Home() {
   const products = useStore((state) => state.products);
   const leaderboard = useStore((state) => state.leaderboard);
   const leaderboardKind = useStore((state) => state.leaderboardKind);
+  const myLevel = useStore((state) => state.engagement?.title ?? "");
   const catalog = useStore((state) => state.activitiesCatalog);
   const loadActivities = useStore((state) => state.loadActivities);
   const loadEngagement = useStore((state) => state.loadEngagement);
-  const [news, setNews] = useState<{ id: string; title: string; summary: string }[]>([]);
+  const [news, setNews] = useState<{ id: string; title: string; summary: string; imageUrl: string }[]>([]);
 
   useEffect(() => {
     void loadActivities();
@@ -34,8 +35,13 @@ function Home() {
         setNews(
           list
             .map((item) => {
-              const record = item as { id?: unknown; title?: unknown; summary?: unknown };
-              return { id: String(record.id ?? ""), title: String(record.title ?? ""), summary: String(record.summary ?? "") };
+              const record = item as { id?: unknown; title?: unknown; summary?: unknown; imageUrl?: unknown };
+              return {
+                id: String(record.id ?? ""),
+                title: String(record.title ?? ""),
+                summary: String(record.summary ?? ""),
+                imageUrl: coverFor(String(record.id ?? ""), typeof record.imageUrl === "string" ? record.imageUrl : ""),
+              };
             })
             .filter((item) => item.id && item.title),
         );
@@ -83,7 +89,7 @@ function Home() {
 
       <div className="mt-10 hidden items-start gap-8 lg:grid lg:grid-cols-[minmax(0,1fr)_300px]">
         <div className="min-w-0 space-y-10">
-          <Leaderboard board={top} full={board} people={people} currentId={user.id} caption={leaderboardKind === "activity" ? "Топ по апексам за квесты, опросы, мероприятия и достижения" : "Топ по благодарностям"} />
+          <Leaderboard board={top} full={board} people={people} currentId={user.id} mineLevel={myLevel} caption={leaderboardKind === "level" ? "Топ по уровню активности за 30 дней" : "Топ по благодарностям"} />
           {news.length > 0 ? <News items={news} /> : null}
           <Achievements items={catalog.achievements} />
           <ActivitiesPreview items={activities} loading={catalog.status === "loading" || catalog.status === "idle"} />
@@ -100,7 +106,7 @@ function Home() {
         <ActivityLevelCard />
         <BalanceCard user={user} />
         <ActivitiesPreview items={activities} loading={catalog.status === "loading" || catalog.status === "idle"} scroll />
-        <Leaderboard board={top} full={board} people={people} currentId={user.id} caption={leaderboardKind === "activity" ? "Топ по апексам за квесты, опросы, мероприятия и достижения" : "Топ по благодарностям"} />
+        <Leaderboard board={top} full={board} people={people} currentId={user.id} mineLevel={myLevel} caption={leaderboardKind === "level" ? "Топ по уровню активности за 30 дней" : "Топ по благодарностям"} />
         {news.length > 0 ? <News items={news} /> : null}
         <Achievements items={catalog.achievements} />
         <Feed people={people} feed={feed} />
@@ -116,12 +122,14 @@ function Leaderboard({
   people,
   currentId,
   caption,
+  mineLevel,
 }: {
   board: { id: string; name: string; score: number }[];
   full: { id: string; name: string; score: number }[];
   people: Person[];
   currentId: string;
   caption: string;
+  mineLevel?: string;
 }) {
   const mineAt = full.findIndex((person) => person.id === currentId);
   const shown = mineAt >= 0 && mineAt < board.length;
@@ -141,6 +149,7 @@ function Leaderboard({
               place={index + 1}
               people={people}
               mine={person.id === currentId}
+              level={person.id === currentId ? mineLevel : ""}
             />
           ))}
         </ol>
@@ -152,6 +161,7 @@ function Leaderboard({
             place={mineAt >= 0 ? mineAt + 1 : full.length + 1}
             people={people}
             mine
+            level={mineLevel}
           />
         </div>
       ) : null}
@@ -164,11 +174,13 @@ function LeaderRow({
   place,
   people,
   mine,
+  level,
 }: {
   person: { id: string; name: string; score: number };
   place: number;
   people: Person[];
   mine: boolean;
+  level?: string;
 }) {
   const profile = people.find((item) => item.id === person.id);
   return (
@@ -185,7 +197,10 @@ function LeaderRow({
         {place}
       </span>
       <UserAvatar user={{ name: person.name, avatarUrl: profile?.avatarUrl }} className="size-9" />
-      <span className="min-w-0 flex-1 truncate text-sm">{person.name}</span>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-sm">{person.name}</span>
+        {level ? <span className="mt-0.5 block text-xs font-medium text-brand">{level}</span> : null}
+      </span>
       <span className="tabular shrink-0 text-sm font-semibold">{formatNumber(person.score)}</span>
     </Link>
   );
@@ -195,7 +210,7 @@ function BalanceCard({ user }: { user: Person }) {
   const reward = useStore((state) => state.rewardBalance);
   const showWork = hasWorkBalance(user.role);
   return (
-    <Panel className="border-brand-soft bg-gradient-to-br from-brand-wash via-surface to-card text-ink">
+    <Panel className="border-brand-soft bg-gradient-to-br from-brand-wash via-surface to-surface text-ink">
       <h2 className="text-lg font-bold">{showWork ? "Балансы" : "Ваш баланс"}</h2>
       {showWork ? <p className="mt-4 text-xs text-muted">Личный</p> : null}
       <p className={`${showWork ? "" : "mt-3"} text-3xl font-bold text-brand`}>{formatPoints(user.balance)}</p>
@@ -238,7 +253,7 @@ function ActivitiesPreview({
               key={item.id}
               to="/activities"
               search={{ kind: item.kind, focus: item.id }}
-              className={`rounded-xl border border-line bg-gradient-to-b from-surface to-card p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-brand-mid hover:shadow-md ${scroll ? "w-56 shrink-0" : ""}`}
+              className={`rounded-xl border border-line bg-surface p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-brand-mid hover:shadow-md ${scroll ? "w-56 shrink-0" : ""}`}
             >
               <p className="font-bold">{item.title}</p>
               <p className="mt-8 text-sm text-brand">{item.prize}</p>
@@ -257,7 +272,7 @@ function Achievements({ items }: { items: { id: string; name: string; earned: bo
       <h2 className="text-xl font-bold">Достижения</h2>
       <div className="mt-3 grid grid-cols-3 gap-3">
         {items.map((item) => (
-          <Link key={item.id} to="/activities" search={{ kind: "achievement", focus: `achievement-${item.id}` }} className="rounded-xl bg-card px-2 py-4 text-center shadow-sm transition hover:-translate-y-0.5 hover:bg-brand-wash hover:shadow-md">
+          <Link key={item.id} to="/activities" search={{ kind: "achievement", focus: `achievement-${item.id}` }} className="rounded-xl border border-line bg-surface px-2 py-4 text-center shadow-sm transition hover:-translate-y-0.5 hover:border-brand-mid hover:shadow-md">
             <AchievementMark iconUrl={item.iconUrl} earned={item.earned} className="mx-auto size-8" />
             <p className="mt-2 text-xs leading-tight">{item.name}</p>
           </Link>
@@ -267,15 +282,25 @@ function Achievements({ items }: { items: { id: string; name: string; earned: bo
   );
 }
 
-function News({ items }: { items: { id: string; title: string; summary: string }[] }) {
+function News({ items }: { items: { id: string; title: string; summary: string; imageUrl: string }[] }) {
   return (
     <section>
-      <h2 className="text-xl font-bold">Новости</h2>
-      <ul className="mt-3 space-y-2">
+      <div className="flex items-baseline justify-between gap-3">
+        <h2 className="text-xl font-bold">Новости</h2>
+        <Link to="/news" className="shrink-0 text-sm font-semibold text-brand">
+          Все
+        </Link>
+      </div>
+      <ul className="mt-3 grid gap-3 sm:grid-cols-2">
         {items.map((item) => (
-          <li key={item.id} className="rounded-xl bg-gradient-to-r from-brand-wash to-surface px-4 py-3 shadow-sm">
-            <p className="font-semibold">{item.title}</p>
-            {item.summary ? <p className="mt-1 text-sm text-muted">{item.summary}</p> : null}
+          <li key={item.id}>
+            <Link to="/news" search={{ id: item.id }} className="block overflow-hidden rounded-xl border border-line bg-surface shadow-sm transition hover:-translate-y-0.5 hover:border-brand-mid hover:shadow-md">
+              <img src={item.imageUrl} alt="" className="aspect-[16/9] w-full object-cover" />
+              <div className="p-4">
+                <p className="font-semibold">{item.title}</p>
+                {item.summary ? <p className="mt-1 text-sm text-muted">{item.summary}</p> : null}
+              </div>
+            </Link>
           </li>
         ))}
       </ul>
@@ -285,7 +310,7 @@ function News({ items }: { items: { id: string; title: string; summary: string }
 
 function Feed({ people, feed }: { people: Person[]; feed: FeedItem[] }) {
   return (
-    <section className="min-w-0">
+    <section className="min-w-0 rounded-xl border border-line bg-surface p-4 shadow-sm">
       <div className="flex items-baseline justify-between gap-3">
         <h2 className="text-xl font-bold">Лента благодарностей</h2>
         <Link to="/colleagues" className="shrink-0 text-sm font-semibold text-brand">
@@ -318,6 +343,14 @@ function Feed({ people, feed }: { people: Person[]; feed: FeedItem[] }) {
       </ul>
     </section>
   );
+}
+
+function coverFor(id: string, imageUrl: string) {
+  if (imageUrl.trim()) return imageUrl;
+  const covers = ["/news/cover-1.jpg", "/news/cover-2.jpg", "/news/cover-3.jpg"];
+  let hash = 0;
+  for (const char of id) hash = (hash + char.charCodeAt(0)) % covers.length;
+  return covers[hash] ?? covers[0];
 }
 
 function Popular({ products }: { products: Product[] }) {

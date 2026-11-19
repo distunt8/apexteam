@@ -10,6 +10,7 @@ import {
   LifeBuoy,
   LogOut,
   Menu,
+  Newspaper,
   Settings,
   ShoppingBag,
   UserRound,
@@ -17,9 +18,10 @@ import {
   X,
   Zap,
 } from "lucide-react";
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Wordmark } from "@/components/logo";
 import { cn } from "@/lib/cn";
+import { apex } from "@/lib/apex";
 import { formatNumber, pointsLabel } from "@/lib/format";
 import { ROLE_LABEL } from "@/lib/labels";
 import { canOpenAdmin, hasWorkBalance, useStore, type Role } from "@/lib/store";
@@ -27,12 +29,12 @@ import { canOpenAdmin, hasWorkBalance, useStore, type Role } from "@/lib/store";
 type NavTo =
   | "/"
   | "/activities"
-  | "/my-activity"
   | "/colleagues"
   | "/catalog"
   | "/cart"
   | "/orders"
   | "/history"
+  | "/news"
   | "/support"
   | "/profile"
   | "/admin";
@@ -42,16 +44,9 @@ type NavGroup = { id: string; label: string; icon: typeof Home; items: NavLink[]
 
 const NAV: Array<NavLink & { icon: typeof Home } | NavGroup> = [
   { to: "/", label: "Главная", icon: Home },
-  {
-    id: "activities",
-    label: "Активности",
-    icon: Zap,
-    items: [
-      { to: "/activities", label: "Все активности" },
-      { to: "/my-activity", label: "Моя активность" },
-    ],
-  },
+  { to: "/activities", label: "Активности", icon: Zap },
   { to: "/colleagues", label: "Коллеги", icon: Users },
+  { to: "/news", label: "Новости", icon: Newspaper },
   {
     id: "shop",
     label: "Магазин",
@@ -102,8 +97,9 @@ export function Shell({
         <Link to="/" aria-label="На главную">
           <Wordmark className="h-8" />
         </Link>
-        <Link to="/notifications" className="grid size-11 place-items-center" aria-label="Уведомления">
+        <Link to="/notifications" className="relative grid size-11 place-items-center" aria-label="Уведомления">
           <Bell className="size-5" />
+          <UnreadMark />
         </Link>
         <UserMenu compact />
       </header>
@@ -120,9 +116,15 @@ export function Shell({
           <Link to="/" aria-label="На главную" onClick={() => setOpen(false)}>
             <Wordmark />
           </Link>
-          <button type="button" className="grid size-10 place-items-center lg:hidden" aria-label="Закрыть" onClick={() => setOpen(false)}>
-            <X className="size-5" />
-          </button>
+          <div className="flex items-center">
+            <Link to="/notifications" className="relative hidden size-10 place-items-center rounded-md hover:bg-surface lg:grid" aria-label="Уведомления" onClick={() => setOpen(false)}>
+              <Bell className="size-4" />
+              <UnreadMark />
+            </Link>
+            <button type="button" className="grid size-10 place-items-center lg:hidden" aria-label="Закрыть" onClick={() => setOpen(false)}>
+              <X className="size-5" />
+            </button>
+          </div>
         </div>
         <nav className="mt-6 flex flex-1 flex-col gap-1 overflow-y-auto">
           {NAV.map((item) => {
@@ -225,10 +227,35 @@ export function Shell({
         </div>
       </aside>
 
-      <main className="lg:pl-[260px]">
-        <div className="mx-auto w-full min-w-0 max-w-[1400px] px-2 pt-4 pb-12 sm:px-3">{children}</div>
+      <main className="lg:pl-[260px] overflow-x-hidden">
+        <div className="w-full min-w-0 px-4 pt-5 pb-10 sm:px-6">{children}</div>
       </main>
     </div>
+  );
+}
+
+function UnreadMark() {
+  const path = useRouterState({ select: (state) => state.location.pathname });
+  const [count, setCount] = useState(0);
+  useEffect(() => {
+    let ignore = false;
+    void apex("/api/notifications/unread-count")
+      .then((data) => {
+        if (ignore) return;
+        const record = data && typeof data === "object" ? (data as { count?: unknown }).count : data;
+        const next = Number(record);
+        setCount(Number.isFinite(next) ? next : 0);
+      })
+      .catch(() => undefined);
+    return () => {
+      ignore = true;
+    };
+  }, [path]);
+  if (count <= 0) return null;
+  return (
+    <span className="absolute top-1 right-1 grid h-4 min-w-4 place-items-center rounded-full bg-danger px-1 text-[10px] font-bold leading-none text-white">
+      {count > 9 ? "9+" : count}
+    </span>
   );
 }
 

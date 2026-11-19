@@ -1,4 +1,4 @@
-import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode, TextareaHTMLAttributes } from "react";
+import { useState, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type TextareaHTMLAttributes } from "react";
 import { cn } from "@/lib/cn";
 
 export function Button({
@@ -92,13 +92,38 @@ export function Chip({
 
 export function Panel({ className, children }: { className?: string; children: ReactNode }) {
   return (
-    <section
-      className={cn(
-        "rounded-xl border border-line bg-gradient-to-b from-surface to-card p-5 shadow-[0_10px_30px_-18px_rgba(20,40,70,0.45)] transition duration-200 hover:shadow-[0_16px_36px_-16px_rgba(20,40,70,0.4)] sm:p-6",
-        className,
-      )}
-    >
-      {children}
-    </section>
+    <section className={cn("rounded-xl border border-line bg-surface p-4 shadow-sm", className)}>{children}</section>
+  );
+}
+
+export function NumericInput({
+  value,
+  onChange,
+  ...props
+}: Omit<InputHTMLAttributes<HTMLInputElement>, "value" | "onChange" | "type"> & {
+  value: number;
+  onChange: (value: number) => void;
+}) {
+  const [text, setText] = useState<string | null>(null);
+  const shown = text ?? (Number.isFinite(value) ? String(value) : "");
+  return (
+    <TextInput
+      inputMode="decimal"
+      {...props}
+      value={shown}
+      onFocus={() => setText(Number.isFinite(value) ? String(value) : "")}
+      onBlur={() => setText(null)}
+      onChange={(event) => {
+        const raw = event.target.value.replace(",", ".");
+        if (!/^-?\d*\.?\d*$/.test(raw)) return;
+        setText(raw);
+        if (raw === "" || raw === "-" || raw === "." || raw === "-.") {
+          onChange(0);
+          return;
+        }
+        const next = Number(raw);
+        if (Number.isFinite(next)) onChange(next);
+      }}
+    />
   );
 }
