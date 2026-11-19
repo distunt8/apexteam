@@ -333,7 +333,7 @@ export const PEER_THANKS_AMOUNT = 25;
 
 interface Actions {
   uploadAvatar: (userId: string, file: File) => Promise<Result>;
-  uploadImage: (file: File, bucket?: "products" | "icons" | "proofs") => Promise<Result & { url?: string }>;
+  uploadImage: (file: File, bucket?: "products" | "icons" | "proofs" | "news") => Promise<Result & { url?: string }>;
   boot: () => Promise<void>;
   login: (email: string, password: string) => Promise<Result>;
   logout: () => void;

@@ -164,6 +164,7 @@ function ProductCard({
 }) {
   const [variants, setVariants] = useState<ProductVariant[]>([]);
   const [selectedId, setSelectedId] = useState("");
+  const [offer, setOffer] = useState({ percent: product.discountPercent ?? 0, byVariant: {} as Record<string, number>, badges: product.badges ?? [] });
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
       if (event.key === "Escape") onClose();
@@ -175,10 +176,13 @@ function ProductCard({
     let ignore = false;
     setVariants([]);
     setSelectedId("");
+    setOffer({ percent: product.discountPercent ?? 0, byVariant: {}, badges: product.badges ?? [] });
     void Promise.all([
       apex(`/api/products/${product.id}/variants`).catch(() => null),
       apex(`/api/products/${product.id}`).catch(() => null),
-    ]).then(([listed, details]) => {
+      apex(`/api/products/${product.id}/badges`).catch(() => null),
+      apex(`/api/products/${product.id}/discounts`).catch(() => null),
+    ]).then(([listed, details, badgeRows, discountRows]) => {
       if (ignore) return;
       const source = listed ?? (details && typeof details === "object" ? (details as { variants?: unknown }).variants : null);
       const next = listOf(source)
@@ -187,6 +191,40 @@ function ProductCard({
       setVariants(next);
       const same = next.find((item) => item.image && item.image === product.image) ?? next[0];
       if (same) setSelectedId(same.id);
+      const detail = details && typeof details === "object" ? (details as Record<string, unknown>) : {};
+      const detailBadges = Array.isArray(detail.badges)
+        ? detail.badges
+            .map((item) => {
+              const row = item as { name?: unknown; color?: unknown };
+              const name = String(row.name ?? "");
+              if (!name) return null;
+              const color = String(row.color || "#306cc0");
+              return { name, color: /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(color) ? color : "#306cc0" };
+            })
+            .filter((item): item is { name: string; color: string } => Boolean(item))
+        : [];
+      const assigned = listOf(badgeRows)
+        .map((item) => {
+          const row = item as { name?: unknown; badgeName?: unknown; color?: unknown; badge?: { name?: unknown; color?: unknown } };
+          const name = String(row.name || row.badgeName || row.badge?.name || "");
+          if (!name) return null;
+          const color = String(row.color || row.badge?.color || "#306cc0");
+          return { name, color: /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(color) ? color : "#306cc0" };
+        })
+        .filter((item): item is { name: string; color: string } => Boolean(item));
+      const byVariant: Record<string, number> = {};
+      let percent = product.discountPercent ?? 0;
+      if (detail.discountPercent != null) percent = Number(detail.discountPercent) || percent;
+      for (const item of listOf(discountRows)) {
+        const row = item as { discountPercent?: unknown; productVariantId?: unknown; isActive?: unknown };
+        if (row.isActive === false) continue;
+        const value = Number(row.discountPercent);
+        if (!Number.isFinite(value) || value <= 0) continue;
+        if (row.productVariantId == null || row.productVariantId === "") percent = value;
+        else byVariant[String(row.productVariantId)] = value;
+      }
+      const badges = assigned.length ? assigned : detailBadges.length ? detailBadges : product.badges ?? [];
+      setOffer({ percent, byVariant, badges });
     });
     return () => {
       ignore = true;
@@ -195,8 +233,12 @@ function ProductCard({
 
   const selected = variants.find((item) => item.id === selectedId) ?? null;
   const image = selected?.image || product.image;
-  const price = selected?.price ?? product.price;
+  const percent = selected ? (offer.byVariant[selected.id] ?? offer.percent) : offer.percent;
+  const raw = selected?.price ?? product.originalPrice ?? product.price;
+  const price = selected ? (percent > 0 ? Math.round((raw * (100 - percent)) / 100) : raw) : product.price;
+  const struck = selected ? (percent > 0 && raw > price ? raw : null) : product.originalPrice && product.originalPrice > product.price ? product.originalPrice : null;
   const stock = selected?.stock ?? product.stock;
+  const badges = offer.badges;
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/50 p-4" onClick={onClose}>
@@ -208,8 +250,20 @@ function ProductCard({
         onClick={(event) => event.stopPropagation()}
       >
         <div className="grid md:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
-          <div className="bg-brand-soft">
+          <div className="relative bg-brand-soft">
             <img src={image} alt="" className="aspect-square w-full object-cover md:h-full md:aspect-auto" />
+            {badges.length > 0 ? (
+              <div className="absolute top-3 left-3 flex flex-wrap gap-1">
+                {badges.map((badge) => (
+                  <span key={badge.name} className="rounded-full px-3 py-1 text-sm font-semibold text-white shadow-sm" style={{ background: badge.color }}>
+                    {badge.name}
+                  </span>
+                ))}
+              </div>
+            ) : null}
+            {percent > 0 ? (
+              <span className="absolute top-3 right-3 rounded-full bg-rose-600 px-3 py-1 text-sm font-bold text-white shadow-sm">−{percent}%</span>
+            ) : null}
           </div>
           <div className="relative p-5 sm:p-6">
             <button
@@ -224,7 +278,10 @@ function ProductCard({
             <h2 id="product-card-title" className="mt-2 pr-12 text-2xl font-bold">
               {product.title}
             </h2>
-            <p className="mt-3 text-2xl font-bold text-brand">{formatPoints(price)}</p>
+            <p className="mt-3 text-2xl font-bold text-brand">
+              {struck ? <span className="mr-2 text-base font-medium text-muted line-through">{formatPoints(struck)}</span> : null}
+              {formatPoints(price)}
+            </p>
             <p className="mt-4 text-sm leading-6">{product.description || "Описание пока не добавлено."}</p>
             {variants.length > 0 ? (
               <div className="mt-4">

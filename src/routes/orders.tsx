@@ -1,8 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
+import { toast } from "sonner";
 import { Pager, usePage } from "@/components/pager";
 import { Shell } from "@/components/shell";
-import { Panel } from "@/components/ui";
+import { Button, Panel } from "@/components/ui";
 import { formatDateTime, formatPoints } from "@/lib/format";
 import { orderStatusLabel } from "@/lib/labels";
 import { useStore } from "@/lib/store";
@@ -14,6 +15,9 @@ function OrdersPage() {
   const allOrders = useStore((state) => state.orders);
   const orders = allOrders.filter((order) => order.userId === userId);
   const [sort, setSort] = useState<"new" | "old">("new");
+  const [pending, setPending] = useState("");
+  const cancelOrder = useStore((state) => state.setOrderStatus);
+  const refresh = useStore((state) => state.refresh);
   const ordered = [...orders].sort((a, b) =>
     sort === "new" ? b.createdAt.localeCompare(a.createdAt) : a.createdAt.localeCompare(b.createdAt),
   );
@@ -22,7 +26,7 @@ function OrdersPage() {
   return (
     <Shell mode="shop">
       <h1 className="text-3xl font-bold tracking-tight">Мои заказы</h1>
-      <p className="mt-2 text-sm text-muted">Отмену делает администратор или мерчендайзер: апексы возвращаются на баланс.</p>
+      <p className="mt-2 text-sm text-muted">Пока заказ обрабатывается, его можно отменить — апексы вернутся на баланс.</p>
       <label className="mt-4 block text-sm text-muted">
         <span className="sr-only">Сортировка заказов</span>
         <select
@@ -59,6 +63,26 @@ function OrdersPage() {
                   ))}
                 </ul>
                 <p className="mt-3 text-sm font-semibold">Итого {formatPoints(order.total)}</p>
+                {order.status === "processing" ? (
+                  <Button
+                    className="mt-3"
+                    variant="line"
+                    disabled={pending === order.id}
+                    onClick={() => {
+                      setPending(order.id);
+                      void cancelOrder(order.id, "cancelled").then(async (result) => {
+                        if (!result.ok) toast.error(result.error);
+                        else {
+                          toast.success("Заказ отменён, апексы вернулись на баланс");
+                          await refresh();
+                        }
+                        setPending("");
+                      });
+                    }}
+                  >
+                    {pending === order.id ? "Отменяем…" : "Отменить заказ"}
+                  </Button>
+                ) : null}
               </Panel>
             </li>
           ))}

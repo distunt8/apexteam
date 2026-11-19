@@ -11,7 +11,7 @@ function list(data: unknown): Row[] {
   return Array.isArray(source) ? source.filter((item): item is Row => Boolean(item) && typeof item === "object") : [];
 }
 
-export function ProductTools({ productId }: { productId: string }) {
+export function ProductTools({ productId, onVariantCount }: { productId: string; onVariantCount?: (count: number) => void }) {
   const [variants, setVariants] = useState<Row[]>([]);
   const [categories, setCategories] = useState<Row[]>([]);
   const [badges, setBadges] = useState<Row[]>([]);
@@ -40,6 +40,7 @@ export function ProductTools({ productId }: { productId: string }) {
     setBadges(list(badgeRows));
     setAssigned(list(assignedRows));
     setDiscounts(list(discountRows));
+    onVariantCount?.(list(variantRows).length);
   }
 
   useEffect(() => {
@@ -48,16 +49,50 @@ export function ProductTools({ productId }: { productId: string }) {
 
   return (
     <div className="mt-4 space-y-4 rounded-xl border border-line bg-surface p-4 shadow-sm">
-      <h3 className="font-bold">Варианты</h3>
-      <ul className="space-y-1 text-sm">
-        {variants.map((item) => (
-          <li key={String(item.id)} className="flex justify-between gap-2">
-            <span>{String(item.name)}</span>
-            <span className="text-muted">{String(item.price ?? "")} · {String(item.stock ?? "")}</span>
-          </li>
-        ))}
-        {variants.length === 0 ? <li className="text-muted">Вариантов нет.</li> : null}
-      </ul>
+      <h3 className="font-bold">Варианты товара</h3>
+      {variants.length === 0 ? <p className="text-sm text-muted">Вариантов нет — у товара общее фото и общий остаток.</p> : (
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[520px] text-left text-sm">
+            <thead className="text-xs text-muted">
+              <tr>
+                <th className="py-2 pr-2 font-medium">Изображение</th>
+                <th className="py-2 pr-2 font-medium">Название</th>
+                <th className="py-2 pr-2 font-medium">Цена</th>
+                <th className="py-2 pr-2 font-medium">Остаток</th>
+                <th className="py-2 font-medium">Действия</th>
+              </tr>
+            </thead>
+            <tbody>
+              {variants.map((item) => (
+                <tr key={String(item.id)} className="border-t border-line">
+                  <td className="py-2 pr-2">
+                    {item.imageUrl ? <img src={String(item.imageUrl)} alt="" className="h-10 w-14 rounded object-cover" /> : <span className="text-xs text-muted">нет</span>}
+                  </td>
+                  <td className="py-2 pr-2">{String(item.name)}</td>
+                  <td className="py-2 pr-2">{String(item.price ?? "")}</td>
+                  <td className="py-2 pr-2">{String(item.stock ?? "")}</td>
+                  <td className="py-2">
+                    <button
+                      type="button"
+                      className="font-semibold text-danger"
+                      onClick={() => {
+                        void apex(`/api/products/${productId}/variants/${item.id}`, { method: "DELETE" })
+                          .then(() => {
+                            toast.success("Вариант удалён");
+                            return reload();
+                          })
+                          .catch((error: unknown) => toast.error(error instanceof Error ? error.message : "Не получилось"));
+                      }}
+                    >
+                      Удалить
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
       <div className="grid gap-2">
         <TextInput value={name} onChange={(event) => setName(event.target.value)} placeholder="Название варианта" />
         <div className="grid grid-cols-2 gap-2">
@@ -152,8 +187,16 @@ export function ProductTools({ productId }: { productId: string }) {
                 className="text-xs font-semibold text-brand"
                 onClick={() => {
                   void apex(`/api/products/${productId}/badges`, { method: "POST", body: JSON.stringify({ badgeId: Number(item.id) }) })
-                    .then(() => {
-                      toast.success("Бейдж назначен этому товару");
+                    .then(async () => {
+                      await Promise.all(
+                        variants.map((variant) =>
+                          apex(`/api/products/${productId}/badges`, {
+                            method: "POST",
+                            body: JSON.stringify({ badgeId: Number(item.id), productVariantId: Number(variant.id) }),
+                          }).catch(() => undefined),
+                        ),
+                      );
+                      toast.success(variants.length > 0 ? "Бейдж назначен товару и вариантам" : "Бейдж назначен этому товару");
                       return reload();
                     })
                     .catch((error: unknown) => toast.error(error instanceof Error ? error.message : "Не получилось"));
@@ -234,17 +277,26 @@ export function ProductTools({ productId }: { productId: string }) {
         <Button
           variant="line"
           onClick={() => {
-            void apex(`/api/products/${productId}/discounts`, {
-              method: "POST",
-              body: JSON.stringify({
+            void (async () => {
+              const body = {
                 discountPercent: discount,
                 startsAt: new Date().toISOString(),
                 isActive: true,
-              }),
-            }).then(() => {
-              toast.success("Скидка сохранена только для этого товара");
-              return Promise.all([reload(), reloadCatalog()]);
-            }).catch((error: unknown) => toast.error(error instanceof Error ? error.message : "Не получилось"));
+              };
+              await apex(`/api/products/${productId}/discounts`, { method: "POST", body: JSON.stringify(body) });
+              if (variants.length > 0) {
+                await Promise.all(
+                  variants.map((variant) =>
+                    apex(`/api/products/${productId}/discounts`, {
+                      method: "POST",
+                      body: JSON.stringify({ ...body, productVariantId: Number(variant.id) }),
+                    }).catch(() => undefined),
+                  ),
+                );
+              }
+              toast.success(variants.length > 0 ? "Скидка применена к товару и всем вариантам" : "Скидка сохранена только для этого товара");
+              await Promise.all([reload(), reloadCatalog()]);
+            })().catch((error: unknown) => toast.error(error instanceof Error ? error.message : "Не получилось"));
           }}
         >
           Сохранить скидку
@@ -314,7 +366,7 @@ export function NewsDesk() {
                 event.target.value = "";
                 if (!file) return;
                 setUploading(true);
-                void uploadImage(file, "products").then((result) => {
+                void uploadImage(file, "news").then((result) => {
                   setUploading(false);
                   if (!result.ok || !result.url) toast.error(result.ok ? "Сервер не вернул ссылку" : result.error);
                   else setImageUrl(result.url);

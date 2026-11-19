@@ -18,7 +18,6 @@ function Home() {
   const feed = useStore((state) => state.feed);
   const products = useStore((state) => state.products);
   const leaderboard = useStore((state) => state.leaderboard);
-  const leaderboardKind = useStore((state) => state.leaderboardKind);
   const myLevel = useStore((state) => state.engagement?.title ?? "");
   const catalog = useStore((state) => state.activitiesCatalog);
   const loadActivities = useStore((state) => state.loadActivities);
@@ -87,30 +86,38 @@ function Home() {
       <h1 className="text-4xl font-bold">Здравствуйте, {greet}</h1>
       <p className="mt-3 max-w-xl text-base text-muted">Спасибо, что делаете нашу компанию лучше каждый день.</p>
 
-      <div className="mt-10 hidden items-start gap-8 lg:grid lg:grid-cols-[minmax(0,1fr)_300px]">
-        <div className="min-w-0 space-y-10">
-          <Leaderboard board={top} full={board} people={people} currentId={user.id} mineLevel={myLevel} caption={leaderboardKind === "level" ? "Топ по уровню активности за 30 дней" : "Топ по благодарностям"} />
-          {news.length > 0 ? <News items={news} /> : null}
-          <Achievements items={catalog.achievements} />
-          <ActivitiesPreview items={activities} loading={catalog.status === "loading" || catalog.status === "idle"} />
+      <div className="mt-8 hidden gap-4 lg:grid lg:grid-cols-4">
+        <div className="col-span-3 min-w-0">
+          <Leaderboard board={top} full={board} people={people} currentId={user.id} mineLevel={myLevel} caption="Топ по баллам активности за 30 дней" />
+        </div>
+        <div className="col-span-1 min-w-0 space-y-4">
+          <BalanceCard user={user} />
+          <ActivityLevelCard />
+        </div>
+        <div className="col-span-3 min-w-0">
+          <ActivitiesPreview items={activities.slice(0, 3)} loading={catalog.status === "loading" || catalog.status === "idle"} />
+        </div>
+        <div className="col-span-1 min-w-0">
+          <Popular products={popular} />
+        </div>
+        <div className="col-span-2 min-w-0">
           <Feed people={people} feed={feed} />
         </div>
-        <div className="min-w-0 space-y-6">
-          <ActivityLevelCard />
-          <BalanceCard user={user} />
-          <Popular products={popular} />
+        <div className="col-span-1 min-w-0">{news.length > 0 ? <News items={news} compact /> : null}</div>
+        <div className="col-span-1 min-w-0">
+          <Achievements items={catalog.achievements.slice(0, 3)} />
         </div>
       </div>
 
       <div className="mt-8 space-y-8 lg:hidden">
-        <ActivityLevelCard />
         <BalanceCard user={user} />
-        <ActivitiesPreview items={activities} loading={catalog.status === "loading" || catalog.status === "idle"} scroll />
-        <Leaderboard board={top} full={board} people={people} currentId={user.id} mineLevel={myLevel} caption={leaderboardKind === "level" ? "Топ по уровню активности за 30 дней" : "Топ по благодарностям"} />
-        {news.length > 0 ? <News items={news} /> : null}
-        <Achievements items={catalog.achievements} />
-        <Feed people={people} feed={feed} />
+        <ActivityLevelCard />
+        <Leaderboard board={top} full={board} people={people} currentId={user.id} mineLevel={myLevel} caption="Топ по баллам активности за 30 дней" />
+        <ActivitiesPreview items={activities.slice(0, 3)} loading={catalog.status === "loading" || catalog.status === "idle"} scroll />
         <Popular products={popular} />
+        <Feed people={people} feed={feed} />
+        {news.length > 0 ? <News items={news} compact /> : null}
+        <Achievements items={catalog.achievements.slice(0, 3)} />
       </div>
     </Shell>
   );
@@ -282,7 +289,7 @@ function Achievements({ items }: { items: { id: string; name: string; earned: bo
   );
 }
 
-function News({ items }: { items: { id: string; title: string; summary: string; imageUrl: string }[] }) {
+function News({ items, compact = false }: { items: { id: string; title: string; summary: string; imageUrl: string }[]; compact?: boolean }) {
   return (
     <section>
       <div className="flex items-baseline justify-between gap-3">
@@ -291,15 +298,19 @@ function News({ items }: { items: { id: string; title: string; summary: string; 
           Все
         </Link>
       </div>
-      <ul className="mt-3 grid gap-3 sm:grid-cols-2">
-        {items.map((item) => (
+      <ul className={compact ? "mt-3 space-y-2" : "mt-3 grid gap-3 sm:grid-cols-2"}>
+        {items.slice(0, compact ? 3 : 4).map((item) => (
           <li key={item.id}>
-            <Link to="/news" search={{ id: item.id }} className="block overflow-hidden rounded-xl border border-line bg-surface shadow-sm transition hover:-translate-y-0.5 hover:border-brand-mid hover:shadow-md">
-              <img src={item.imageUrl} alt="" className="aspect-[16/9] w-full object-cover" />
-              <div className="p-4">
-                <p className="font-semibold">{item.title}</p>
-                {item.summary ? <p className="mt-1 text-sm text-muted">{item.summary}</p> : null}
-              </div>
+            <Link
+              to="/news"
+              search={{ id: item.id }}
+              className="flex gap-3 overflow-hidden rounded-xl border border-line bg-surface p-2 shadow-sm transition hover:-translate-y-0.5 hover:border-brand-mid hover:shadow-md"
+            >
+              <img src={item.imageUrl} alt="" className="h-16 w-20 shrink-0 rounded-md object-cover" />
+              <span className="min-w-0 py-1">
+                <span className="block text-sm font-semibold leading-5">{item.title}</span>
+                {item.summary && !compact ? <span className="mt-1 block line-clamp-2 text-xs text-muted">{item.summary}</span> : null}
+              </span>
             </Link>
           </li>
         ))}

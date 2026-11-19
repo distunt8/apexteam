@@ -733,14 +733,15 @@ export async function loadWorkspace(): Promise<Workspace> {
       if (!record) continue;
       const kind = str(record.relatedEntityType).toLowerCase();
       if (!["quest", "survey", "event", "achievement", "thank"].includes(kind)) continue;
+      const amount = num(record.amount);
+      if (amount <= 0) continue;
       const created = Date.parse(str(record.createdAt));
       if (!Number.isFinite(created)) continue;
       const age = (now - created) / day;
       if (age < 0 || age > 30) continue;
-      const weight = age <= 7 ? 1 : age <= 14 ? 0.7 : 0.4;
       const id = str(record.userId);
       if (!id) continue;
-      levelTotals.set(id, (levelTotals.get(id) ?? 0) + weight);
+      levelTotals.set(id, (levelTotals.get(id) ?? 0) + amount);
     }
   }
   const leaderboardKind = allTxRes.ok ? "level" : "thanks";
@@ -750,7 +751,7 @@ export async function loadWorkspace(): Promise<Workspace> {
           .map(([id, score]) => ({
             id,
             name: people.get(id)?.name || "Сотрудник",
-            score: Math.round(score * 10) / 10,
+            score: Math.round(score),
           }))
           .sort((a, b) => b.score - a.score || a.name.localeCompare(b.name, "ru"))
       : thanksBoard;

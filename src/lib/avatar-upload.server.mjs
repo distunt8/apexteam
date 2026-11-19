@@ -1,5 +1,5 @@
-const API = "https://apexapp-backend.onrender.com";
-const STORAGE = "https://hqvphndmvluncjfsqspf.supabase.co";
+const API = process.env.APEX_API_ORIGIN ?? "https://apexapp-backend.onrender.com";
+const STORAGE = process.env.APEX_STORAGE_ORIGIN ?? "http://92.51.14.99:17382";
 // Publishable key: access is restricted by the user's JWT and Storage RLS.
 const KEY = "sb_publishable_R-SkLufMhN9va74MbDAU3w_IEzsEWDF";
 const MAX = 2 * 1024 * 1024;
@@ -214,7 +214,7 @@ export async function uploadMedia(request, fetcher = fetch) {
       return json(400, "Не удалось прочитать файл.");
     }
     const asked = form.get("bucket");
-    const bucket = asked === "icons" || asked === "proofs" ? asked : "products";
+    const bucket = asked === "icons" || asked === "proofs" || asked === "news" ? asked : "products";
     const file = form.get("file");
     if (!file || typeof file === "string" || file.size === 0)
       return json(400, "Выберите файл.");

@@ -70,17 +70,17 @@ function NewsPage() {
       <h1 className="text-3xl font-bold tracking-tight">Новости</h1>
       <p className="mt-2 text-sm text-muted">Объявления компании.</p>
       {error ? <p className="mt-4 text-sm text-danger">{error}</p> : null}
-      <ul className="mt-4 grid gap-3 lg:grid-cols-2">
+      <ul className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         {items.length === 0 && !error ? <li className="text-sm text-muted">Пока нет новостей.</li> : null}
         {items.map((item) => (
           <li key={item.id}>
             <button type="button" onClick={() => setOpenId(item.id)} className="w-full text-left">
               <Panel className="h-full overflow-hidden p-0 transition hover:-translate-y-0.5 hover:border-brand-mid">
-                <img src={item.imageUrl} alt="" className="aspect-[16/9] w-full object-cover" />
-                <div className="p-4">
-                  <p className="font-bold">{item.title}</p>
+                <img src={item.imageUrl} alt="" className="h-28 w-full object-cover" />
+                <div className="p-3">
+                  <p className="text-sm font-bold leading-5">{item.title}</p>
                   {item.createdAt ? <p className="mt-1 text-xs text-muted">{formatDateTime(item.createdAt)}</p> : null}
-                  {item.summary ? <p className="mt-2 text-sm text-muted">{item.summary}</p> : null}
+                  {item.summary ? <p className="mt-1 line-clamp-2 text-xs text-muted">{item.summary}</p> : null}
                 </div>
               </Panel>
             </button>

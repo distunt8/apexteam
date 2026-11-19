@@ -128,6 +128,7 @@ function Products() {
   const save = useStore((state) => state.saveProduct);
   const uploadImage = useStore((state) => state.uploadImage);
   const [draft, setDraft] = useState<Product | null>(null);
+  const [variantCount, setVariantCount] = useState(0);
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [query, setQuery] = useState("");
@@ -159,7 +160,7 @@ function Products() {
             <option key={category.id} value={category.id}>{category.name}</option>
           ))}
         </select>
-        <Button variant="line" onClick={() => setDraft(emptyProduct())}>Новый товар</Button>
+        <Button variant="line" onClick={() => { setVariantCount(0); setDraft(emptyProduct()); }}>Новый товар</Button>
       </div>
       {draft?.id === "new" ? <div className="mb-3 rounded-xl border-2 border-brand bg-brand-wash p-4 shadow-md">{productEditor()}</div> : null}
       <ul className="grid gap-3 sm:grid-cols-2">
@@ -230,6 +231,10 @@ function Products() {
           </Field>
         </div>
         <Field label="Фото">
+          {variantCount > 0 ? (
+            <p className="text-sm text-muted">Общее фото скрыто: у товара есть варианты, картинка задаётся у каждого.</p>
+          ) : (
+            <>
           {draft.image ? <img src={draft.image} alt="" className="mb-2 h-24 w-24 rounded-md object-cover" /> : null}
           <label className="inline-flex min-h-11 cursor-pointer items-center rounded-md border border-line bg-surface px-4 text-sm font-semibold hover:border-brand-mid">
             {uploading ? "Загружаем…" : "Выбрать файл"}
@@ -251,14 +256,20 @@ function Products() {
               }}
             />
           </label>
+            </>
+          )}
         </Field>
         <div className="grid grid-cols-2 gap-3">
           <Field label="Цена, апексы">
             <NumericInput value={draft.price} onChange={(price) => setDraft({ ...draft, price })} />
           </Field>
-          <Field label="Остаток">
-            <NumericInput value={draft.stock} onChange={(stock) => setDraft({ ...draft, stock })} />
-          </Field>
+          {variantCount > 0 ? (
+            <p className="self-end text-sm text-muted">Общий остаток скрыт: он складывается из вариантов.</p>
+          ) : (
+            <Field label="Остаток">
+              <NumericInput value={draft.stock} onChange={(stock) => setDraft({ ...draft, stock })} />
+            </Field>
+          )}
         </div>
         <label className="flex min-h-11 items-center gap-2 text-sm lg:col-span-2">
           <input type="checkbox" checked={draft.active} onChange={(event) => setDraft({ ...draft, active: event.target.checked })} />
@@ -268,7 +279,7 @@ function Products() {
           <Button type="submit" disabled={saving || uploading}>{saving ? "Сохраняем…" : "Сохранить"}</Button>
           <Button type="button" variant="line" onClick={() => setDraft(null)}>Отмена</Button>
         </div>
-        {draft.id !== "new" ? <div className="lg:col-span-2"><ProductTools productId={draft.id} /></div> : null}
+        {draft.id !== "new" ? <div className="lg:col-span-2"><ProductTools productId={draft.id} onVariantCount={setVariantCount} /></div> : null}
       </form>
     );
   }

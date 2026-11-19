@@ -43,6 +43,13 @@ type StepItem = {
   completionType: string;
   sortOrder: number;
   required: boolean;
+  actionType: string;
+  targetId: string;
+  achievementCode: string;
+  productId: string;
+  minAmount: string;
+  count: string;
+  requireAvatar: boolean;
 };
 
 type QuestionItem = {
@@ -56,7 +63,21 @@ type QuestionItem = {
 
 type Participant = { id: string; name: string; status: string };
 
-const EMPTY_STEP: StepItem = { id: "", title: "", description: "", completionType: "manual", sortOrder: 0, required: true };
+const EMPTY_STEP: StepItem = {
+  id: "",
+  title: "",
+  description: "",
+  completionType: "manual",
+  sortOrder: 0,
+  required: true,
+  actionType: "",
+  targetId: "",
+  achievementCode: "",
+  productId: "",
+  minAmount: "",
+  count: "1",
+  requireAvatar: true,
+};
 const EMPTY_QUESTION: QuestionItem = { id: "", text: "", type: "text", options: "", required: true, sortOrder: 0 };
 
 const QUESTION_TYPES = [
@@ -72,6 +93,7 @@ function mapStep(raw: unknown): StepItem | null {
   if (!raw || typeof raw !== "object") return null;
   const record = raw as Record<string, unknown>;
   if (record.id == null) return null;
+  const action = readAction(record);
   return {
     id: text(record.id),
     title: text(record.title),
@@ -79,7 +101,28 @@ function mapStep(raw: unknown): StepItem | null {
     completionType: text(record.completionType || "manual"),
     sortOrder: Number(record.sortOrder ?? 0) || 0,
     required: record.isRequired !== false,
+    actionType: text(action.type),
+    targetId: action.targetId == null ? "" : text(action.targetId),
+    achievementCode: text(action.achievementCode),
+    productId: action.productId == null ? "" : text(action.productId),
+    minAmount: action.minAmount == null ? "" : text(action.minAmount),
+    count: action.count == null ? "1" : text(action.count),
+    requireAvatar: action.requireAvatar !== false,
   };
+}
+
+function readAction(record: Record<string, unknown>) {
+  const direct = record.action;
+  if (direct && typeof direct === "object") return direct as Record<string, unknown>;
+  if (typeof record.completionData === "string" && record.completionData.trim()) {
+    try {
+      const parsed = JSON.parse(record.completionData) as unknown;
+      if (parsed && typeof parsed === "object") return parsed as Record<string, unknown>;
+    } catch {
+      return {};
+    }
+  }
+  return {};
 }
 
 function mapQuestion(raw: unknown): QuestionItem | null {
@@ -171,10 +214,21 @@ export function AdminActivities() {
   const [questions, setQuestions] = useState<QuestionItem[]>([]);
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [stepDraft, setStepDraft] = useState<StepItem>(EMPTY_STEP);
+  const [actions, setActions] = useState<StepAction[]>([]);
+  const [actionOptions, setActionOptions] = useState<Record<string, { id: string; label: string }[]>>({});
   const [questionDraft, setQuestionDraft] = useState<QuestionItem>(EMPTY_QUESTION);
   const [error, setError] = useState("");
   const [query, setQuery] = useState("");
   const [onlyActive, setOnlyActive] = useState<"all" | "yes" | "no">("all");
+
+  useEffect(() => {
+    void apex("/api/quests/step-actions")
+      .then((data) => {
+        const rows = (Array.isArray(data) ? data : []) as StepAction[];
+        setActions(rows.filter((item) => item && item.code));
+      })
+      .catch(() => setActions([]));
+  }, []);
 
   async function reload(next = kind) {
     setError("");
@@ -333,7 +387,23 @@ export function AdminActivities() {
       completionType: stepDraft.completionType,
       sortOrder: stepDraft.sortOrder,
       isRequired: stepDraft.required,
+      completionData:
+        stepDraft.completionType === "automatic"
+          ? JSON.stringify({
+              type: stepDraft.actionType,
+              targetId: stepDraft.targetId ? Number(stepDraft.targetId) : null,
+              achievementCode: stepDraft.achievementCode || null,
+              productId: stepDraft.productId ? Number(stepDraft.productId) : null,
+              minAmount: stepDraft.minAmount ? Number(stepDraft.minAmount) : null,
+              count: stepDraft.count ? Number(stepDraft.count) : null,
+              requireAvatar: stepDraft.actionType === "complete_profile" ? stepDraft.requireAvatar : null,
+            })
+          : null,
     };
+    if (stepDraft.completionType === "automatic" && !stepDraft.actionType) {
+      toast.error("Выберите шаблон автоматического шага");
+      return;
+    }
     try {
       await apex(stepDraft.id ? `/api/quests/${draft.id}/steps/${stepDraft.id}` : `/api/quests/${draft.id}/steps`, {
         method: stepDraft.id ? "PUT" : "POST",
@@ -627,6 +697,45 @@ export function AdminActivities() {
                 <option value="automatic">Засчитывается автоматически</option>
               </select>
             </Field>
+            {stepDraft.completionType === "automatic" ? (
+              <AutomaticAction
+                actions={actions}
+                step={stepDraft}
+                options={actionOptions}
+                onChange={setStepDraft}
+                onNeedOptions={(source) => {
+                  if (actionOptions[source]) return;
+                  const path =
+                    source === "quests"
+                      ? "/api/quests?page=1&pageSize=50"
+                      : source === "surveys"
+                        ? "/api/surveys?page=1&pageSize=50"
+                        : source === "events"
+                          ? "/api/events?page=1&pageSize=50"
+                          : source === "products"
+                            ? "/api/products?page=1&pageSize=50"
+                            : source === "achievements"
+                              ? "/api/achievements"
+                              : "/api/company-news?page=1&pageSize=30";
+                  void apex(path)
+                    .then((data) => {
+                      const list = Array.isArray(data) ? data : ((data as { items?: unknown[] })?.items ?? []);
+                      setActionOptions((current) => ({
+                        ...current,
+                        [source]: list
+                          .map((item) => {
+                            const row = item as { id?: unknown; title?: unknown; name?: unknown; code?: unknown };
+                            const id = source === "achievements" ? String(row.code ?? "") : String(row.id ?? "");
+                            const label = String(row.title || row.name || row.code || "");
+                            return id && label ? { id, label } : null;
+                          })
+                          .filter((item): item is { id: string; label: string } => Boolean(item)),
+                      }));
+                    })
+                    .catch(() => undefined);
+                }}
+              />
+            ) : null}
             <Field label="Описание">
               <TextArea value={stepDraft.description} onChange={(event) => setStepDraft({ ...stepDraft, description: event.target.value })} />
             </Field>
@@ -716,6 +825,110 @@ export function AdminActivities() {
           </ul>
         </section>
       ) : null}
+    </div>
+  );
+}
+
+type StepAction = {
+  code: string;
+  name: string;
+  description?: string;
+  isAvailable?: boolean;
+  unavailableReason?: string | null;
+  parameters?: { name: string; label: string; kind: string; optionsSource?: string | null; required?: boolean; helpText?: string | null }[];
+};
+
+function AutomaticAction({
+  actions,
+  step,
+  options,
+  onChange,
+  onNeedOptions,
+}: {
+  actions: StepAction[];
+  step: StepItem;
+  options: Record<string, { id: string; label: string }[]>;
+  onChange: (step: StepItem) => void;
+  onNeedOptions: (source: string) => void;
+}) {
+  const current = actions.find((item) => item.code === step.actionType);
+  useEffect(() => {
+    for (const param of current?.parameters ?? []) {
+      if (param.optionsSource && !options[param.optionsSource]) onNeedOptions(param.optionsSource);
+    }
+  }, [step.actionType]);
+  return (
+    <div className="sm:col-span-2 space-y-3 rounded-lg border border-line bg-surface p-3">
+      <Field label="Шаблон автоматического шага">
+        <select
+          className="h-11 w-full rounded-md border border-line bg-surface px-3 text-sm"
+          value={step.actionType}
+          onChange={(event) => {
+            const next = actions.find((item) => item.code === event.target.value);
+            onChange({ ...step, actionType: event.target.value });
+            for (const param of next?.parameters ?? []) {
+              if (param.optionsSource) onNeedOptions(param.optionsSource);
+            }
+          }}
+        >
+          <option value="">Выберите действие</option>
+          {actions.map((item) => (
+            <option key={item.code} value={item.code} disabled={item.isAvailable === false}>
+              {item.name}
+              {item.isAvailable === false ? " — пока недоступно" : ""}
+            </option>
+          ))}
+        </select>
+      </Field>
+      {current?.description ? <p className="text-xs text-muted">{current.description}</p> : null}
+      {current?.unavailableReason ? <p className="text-xs text-danger">{current.unavailableReason}</p> : null}
+      {(current?.parameters ?? []).map((param) => {
+        if (param.kind === "entity" && param.optionsSource) {
+          const list = options[param.optionsSource] ?? [];
+          const value = param.name === "achievementCode" ? step.achievementCode : param.name === "productId" ? step.productId : step.targetId;
+          return (
+            <Field key={param.name} label={param.label}>
+              <select
+                className="h-11 w-full rounded-md border border-line bg-surface px-3 text-sm"
+                value={value}
+                onChange={(event) => {
+                  const picked = event.target.value;
+                  if (param.name === "achievementCode") onChange({ ...step, achievementCode: picked });
+                  else if (param.name === "productId") onChange({ ...step, productId: picked });
+                  else onChange({ ...step, targetId: picked });
+                }}
+              >
+                <option value="">Не выбрано</option>
+                {list.map((item) => (
+                  <option key={item.id} value={item.id}>{item.label}</option>
+                ))}
+              </select>
+            </Field>
+          );
+        }
+        if (param.kind === "boolean") {
+          return (
+            <label key={param.name} className="flex min-h-11 items-center gap-2 text-sm">
+              <input type="checkbox" checked={step.requireAvatar} onChange={(event) => onChange({ ...step, requireAvatar: event.target.checked })} />
+              {param.label}
+            </label>
+          );
+        }
+        const value = param.name === "minAmount" ? step.minAmount : step.count;
+        return (
+          <Field key={param.name} label={param.label}>
+            <TextInput
+              value={value}
+              inputMode="numeric"
+              onChange={(event) =>
+                param.name === "minAmount"
+                  ? onChange({ ...step, minAmount: event.target.value })
+                  : onChange({ ...step, count: event.target.value })
+              }
+            />
+          </Field>
+        );
+      })}
     </div>
   );
 }
