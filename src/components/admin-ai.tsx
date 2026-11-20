@@ -11,6 +11,7 @@ const MODES = [
   ["event", "Мероприятие"],
   ["product", "Товар"],
   ["engagement", "Вовлечённость"],
+  ["catalog", "Каталог"],
   ["alternatives", "Альтернативы"],
 ] as const;
 
@@ -39,6 +40,12 @@ export function AdminAi() {
   const [reward, setReward] = useState(50);
   const [startAt, setStartAt] = useState("");
   const [endAt, setEndAt] = useState("");
+  const [fromAt, setFromAt] = useState(() => localStamp(daysAgo(30)));
+  const [toAt, setToAt] = useState(() => localStamp(new Date()));
+  const [granularity, setGranularity] = useState("day");
+  const [departmentId, setDepartmentId] = useState("");
+  const [departments, setDepartments] = useState<{ id: number; name: string }[]>([]);
+  const [top, setTop] = useState(10);
   const [status, setStatus] = useState("");
   const [busy, setBusy] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -52,6 +59,20 @@ export function AdminAi() {
         setStatus(record.configured ? "Модуль подключён" : "Модуль на сервере не настроен");
       })
       .catch(() => setStatus("Не удалось узнать состояние модуля"));
+    void apex("/api/departments")
+      .then((data) => {
+        const rows = Array.isArray(data) ? data : [];
+        setDepartments(
+          rows.flatMap((item) => {
+            if (!item || typeof item !== "object") return [];
+            const row = item as { id?: unknown; name?: unknown; isActive?: unknown };
+            if (row.isActive === false || row.id == null) return [];
+            const id = Number(row.id);
+            return Number.isInteger(id) ? [{ id, name: String(row.name || "Отдел") }] : [];
+          }),
+        );
+      })
+      .catch(() => undefined);
   }, []);
 
   async function run() {
@@ -60,7 +81,16 @@ export function AdminAi() {
     setDraft(null);
     try {
       const prompt = topic.trim() || text.trim();
-      if (mode !== "engagement" && mode !== "improve" && !prompt) {
+      const analytics = mode === "engagement" || mode === "catalog";
+      if (mode === "improve" && !text.trim()) {
+        toast.error("Вставьте текст, который нужно улучшить");
+        return;
+      }
+      if (mode === "alternatives" && !text.trim() && !topic.trim()) {
+        toast.error("Вставьте текст, для которого нужны варианты");
+        return;
+      }
+      if (!analytics && mode !== "engagement" && mode !== "improve" && !prompt) {
         toast.error("Напишите, что нужно придумать");
         return;
       }
@@ -77,10 +107,19 @@ export function AdminAi() {
                   ? "/api/ai/content/product-draft"
                   : mode === "engagement"
                     ? "/api/ai/recommendations/engagement"
-                    : "/api/ai/content/alternatives";
+                    : mode === "catalog"
+                      ? "/api/ai/recommendations/products"
+                      : "/api/ai/content/alternatives";
+      const period = {
+        from: toIso(fromAt),
+        to: toIso(toAt),
+        granularity,
+        top,
+        notes: text.trim() || null,
+      };
       const body =
         mode === "improve"
-          ? { text, textKind: "описание", instruction: topic, tone: "деловой" }
+          ? { text: text.trim(), textKind: "описание", instruction: topic.trim() || null, tone: "деловой" }
           : mode === "quest" || mode === "survey"
             ? { prompt, rewardAmount: reward, questionsCount: 5 }
             : mode === "event"
@@ -88,8 +127,10 @@ export function AdminAi() {
               : mode === "product"
                 ? { prompt }
                 : mode === "engagement"
-                  ? { focus: "all", notes: [topic, text].filter((item) => item.trim()).join("\n"), top: 5 }
-                  : { text: text || topic, textKind: "описание", tone: "деловой", variants: 2 };
+                  ? { ...period, departmentId: departmentId ? Number(departmentId) : null, focus: "all" }
+                  : mode === "catalog"
+                    ? period
+                    : { text: text.trim() || topic.trim(), textKind: "описание", tone: "деловой", variants: 3 };
       const data = await apex(path, { method: "POST", body: JSON.stringify(body) });
       setResult(data);
       if (mode === "quest" || mode === "survey" || mode === "event" || mode === "product") {
@@ -238,10 +279,41 @@ export function AdminAi() {
             </button>
           ))}
         </div>
-        <Field label={mode === "improve" ? "Что поправить" : "Тема"}>
-          <TextInput value={topic} onChange={(event) => setTopic(event.target.value)} />
-        </Field>
-        <Field label={mode === "improve" ? "Текст" : "Заметки"}>
+        {mode === "engagement" || mode === "catalog" ? (
+          <div className="grid gap-2">
+            <Field label="С">
+              <TextInput type="datetime-local" value={fromAt} onChange={(event) => setFromAt(event.target.value)} />
+            </Field>
+            <Field label="По">
+              <TextInput type="datetime-local" value={toAt} onChange={(event) => setToAt(event.target.value)} />
+            </Field>
+            <Field label="Шаг">
+              <select className="h-11 w-full rounded-md border border-line bg-surface px-3 text-sm" value={granularity} onChange={(event) => setGranularity(event.target.value)}>
+                <option value="day">День</option>
+                <option value="week">Неделя</option>
+                <option value="month">Месяц</option>
+              </select>
+            </Field>
+            {mode === "engagement" ? (
+              <Field label="Отдел">
+                <select className="h-11 w-full rounded-md border border-line bg-surface px-3 text-sm" value={departmentId} onChange={(event) => setDepartmentId(event.target.value)}>
+                  <option value="">Все отделы</option>
+                  {departments.map((item) => (
+                    <option key={item.id} value={item.id}>{item.name}</option>
+                  ))}
+                </select>
+              </Field>
+            ) : null}
+            <Field label="Топ">
+              <NumericInput value={top} onChange={setTop} />
+            </Field>
+          </div>
+        ) : (
+          <Field label={mode === "improve" ? "Что поправить" : mode === "alternatives" ? "Пожелание" : "Тема"}>
+            <TextInput value={topic} onChange={(event) => setTopic(event.target.value)} />
+          </Field>
+        )}
+        <Field label={mode === "improve" || mode === "alternatives" ? "Текст" : "Заметки"}>
           <TextArea value={text} onChange={(event) => setText(event.target.value)} className="min-h-28" />
         </Field>
         {mode === "quest" || mode === "survey" || mode === "event" ? (
@@ -269,6 +341,10 @@ export function AdminAi() {
           <DraftEditor draft={draft} busy={creating} onChange={setDraft} onCreate={() => void createDraft()} />
         ) : !result ? (
           <p className="mt-3 text-sm text-muted">Запрос уходит только по кнопке и не тратится при открытии вкладки.</p>
+        ) : mode === "improve" || mode === "alternatives" ? (
+          <TextResult mode={mode} data={result} />
+        ) : mode === "engagement" || mode === "catalog" ? (
+          <Recommendation data={result} kind={mode} />
         ) : (
           <Answer data={result} />
         )}
@@ -405,6 +481,105 @@ function readDraft(kind: Draft["kind"], data: unknown): Draft {
   };
 }
 
+function TextResult({ mode, data }: { mode: "improve" | "alternatives"; data: unknown }) {
+  const content = unwrap(data);
+  if (mode === "alternatives" && Array.isArray(content)) {
+    if (content.length === 0) return <p className="mt-3 text-sm text-muted">Варианты не пришли.</p>;
+    return (
+      <ul className="mt-3 space-y-3">
+        {content.map((item, index) => {
+          const row = item && typeof item === "object" ? (item as Record<string, unknown>) : {};
+          return (
+            <li key={index} className="rounded-lg border border-line bg-card p-3 text-sm">
+              <p className="font-semibold">{String(row.label || `Вариант ${index + 1}`)}</p>
+              <p className="mt-2 whitespace-pre-wrap">{String(row.text || "Пустой вариант")}</p>
+            </li>
+          );
+        })}
+      </ul>
+    );
+  }
+  const row = content && typeof content === "object" && !Array.isArray(content) ? (content as Record<string, unknown>) : {};
+  const text = typeof row.text === "string" ? row.text : typeof content === "string" ? content : "";
+  const changes = Array.isArray(row.changes) ? row.changes.map((item) => String(item)) : [];
+  if (!text && changes.length === 0) return <Answer data={data} />;
+  return (
+    <div className="mt-3 space-y-3 text-sm">
+      <p className="whitespace-pre-wrap rounded-lg border border-line bg-card p-3">{text || "Текст не пришёл."}</p>
+      {changes.length > 0 ? (
+        <div>
+          <p className="text-xs font-semibold text-muted">Что изменено</p>
+          <ul className="mt-1 list-disc space-y-1 pl-5">
+            {changes.map((item) => (
+              <li key={item}>{item}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function Recommendation({ data, kind }: { data: unknown; kind: "engagement" | "catalog" }) {
+  const content = unwrap(data);
+  const row = content && typeof content === "object" && !Array.isArray(content) ? (content as Record<string, unknown>) : {};
+  const analysis = typeof row.analysis === "string" ? row.analysis : "";
+  const findings = Array.isArray(row.findings) ? row.findings : [];
+  const recommendations = Array.isArray(row.recommendedActivities)
+    ? row.recommendedActivities
+    : Array.isArray(row.recommendedProducts)
+      ? row.recommendedProducts
+      : [];
+  const limitations = Array.isArray(row.limitations) ? row.limitations.map(String) : [];
+  if (!analysis && findings.length === 0 && recommendations.length === 0) return <Answer data={data} />;
+  return (
+    <div className="mt-3 space-y-4 text-sm">
+      {analysis ? <p className="whitespace-pre-wrap">{analysis}</p> : null}
+      {recommendations.length > 0 ? (
+        <div>
+          <p className="font-semibold">{kind === "catalog" ? "Товары" : "Активности"}</p>
+          <ul className="mt-2 space-y-2">
+            {recommendations.map((item, index) => {
+              const card = item && typeof item === "object" ? (item as Record<string, unknown>) : {};
+              return (
+                <li key={index} className="rounded-lg border border-line bg-card p-3">
+                  <p className="font-semibold">{String(card.name || card.title || "Без названия")}</p>
+                  {card.action ? <p className="mt-1">{String(card.action)}</p> : null}
+                  {card.rationale ? <p className="mt-1 text-muted">{String(card.rationale)}</p> : null}
+                  {card.expectedImpact ? <p className="mt-1 text-muted">Эффект: {String(card.expectedImpact)}</p> : null}
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      ) : null}
+      {findings.length > 0 ? (
+        <div>
+          <p className="font-semibold">Наблюдения</p>
+          <ul className="mt-2 space-y-1">
+            {findings.map((item, index) => {
+              const finding = item && typeof item === "object" ? (item as Record<string, unknown>) : {};
+              return (
+                <li key={index}>
+                  <span className="font-medium">{String(finding.title || "Наблюдение")}</span>
+                  {finding.description ? <span className="text-muted"> — {String(finding.description)}</span> : null}
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      ) : null}
+      {limitations.length > 0 ? <p className="text-xs text-muted">{limitations.join(" ")}</p> : null}
+    </div>
+  );
+}
+
+function unwrap(data: unknown) {
+  if (!data || typeof data !== "object" || Array.isArray(data)) return data;
+  const record = data as Record<string, unknown>;
+  return record.content ?? data;
+}
+
 function Answer({ data }: { data: unknown }) {
   const record = data && typeof data === "object" ? (data as Record<string, unknown>) : {};
   const content = record.content ?? data;
@@ -447,6 +622,15 @@ function Block({ value, depth = 0 }: { value: unknown; depth?: number }) {
         ))}
     </div>
   );
+}
+
+function daysAgo(days: number) {
+  return new Date(Date.now() - days * 86_400_000);
+}
+
+function localStamp(date: Date) {
+  const pad = (part: number) => String(part).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
 function toIso(value: string) {
