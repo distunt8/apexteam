@@ -236,9 +236,16 @@ export interface AppState {
   mustChangePassword: boolean;
   notices: Notice[];
   seq: number;
+  peerThanksAmount: number;
 }
 
 export type Result = { ok: true } | { ok: false; error: string };
+
+function readThanksAmount() {
+  if (typeof localStorage === "undefined") return PEER_THANKS_AMOUNT;
+  const raw = Number(localStorage.getItem("apex-thanks-amount"));
+  return Number.isInteger(raw) && raw > 0 ? raw : PEER_THANKS_AMOUNT;
+}
 
 const seed = (): AppState => ({
   session: "unknown",
@@ -278,6 +285,7 @@ const seed = (): AppState => ({
   ticketsError: "",
   mustChangePassword: false,
   notices: [],
+  peerThanksAmount: readThanksAmount(),
 });
 
 function nextId(state: AppState, prefix: string) {
@@ -338,6 +346,7 @@ interface Actions {
   login: (email: string, password: string) => Promise<Result>;
   logout: () => void;
   refresh: () => Promise<void>;
+  setPeerThanksAmount: (amount: number) => void;
   changePassword: (password: string, current?: string) => Promise<Result>;
   loadTickets: () => Promise<void>;
   createEmployee: (input: {
@@ -601,6 +610,11 @@ export const useStore = create<AppState & Actions>()(
           sessionError: "",
           engagementStatus: workspace.engagement ? "ready" : "error",
         });
+      },
+      setPeerThanksAmount: (amount) => {
+        const next = Math.max(1, Math.round(amount));
+        if (typeof localStorage !== "undefined") localStorage.setItem("apex-thanks-amount", String(next));
+        set({ peerThanksAmount: next });
       },
       changePassword: async (password, current) => {
         const next = password.trim();
@@ -923,7 +937,7 @@ export const useStore = create<AppState & Actions>()(
         if (!sender || !recipient) return { ok: false as const, error: "Сотрудник не найден" };
         if (sender.id === recipient.id) return { ok: false as const, error: "Нельзя поблагодарить самого себя" };
         if (recipient.status !== "active") return { ok: false as const, error: "Этому сотруднику сейчас нельзя отправить" };
-        const points = asManager ? amount : PEER_THANKS_AMOUNT;
+        const points = asManager ? amount : get().peerThanksAmount || PEER_THANKS_AMOUNT;
         if (asManager && (!Number.isInteger(points) || points <= 0)) return { ok: false as const, error: "Укажите сумму" };
         if (!asManager && textMessage.length < 2) return { ok: false as const, error: "Напишите пару слов" };
         if (!asManager && thankedThisWeek(state.feed, sender.id, recipient.id)) {
@@ -1252,6 +1266,7 @@ export const useStore = create<AppState & Actions>()(
       partialize: (state) => ({
         notices: state.notices,
         seq: state.seq,
+        peerThanksAmount: state.peerThanksAmount,
       }),
     },
   ),

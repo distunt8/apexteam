@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Button, Field, NumericInput, Panel, TextArea, TextInput } from "@/components/ui";
 import { apex } from "@/lib/apex";
+import { automaticActionBody } from "@/lib/quest-action";
 
 const MODES = [
   ["improve", "Улучшить текст"],
@@ -81,14 +82,14 @@ export function AdminAi() {
         mode === "improve"
           ? { text, textKind: "описание", instruction: topic, tone: "деловой" }
           : mode === "quest" || mode === "survey"
-            ? { prompt, rewardAmount: reward }
+            ? { prompt, rewardAmount: reward, questionsCount: 5 }
             : mode === "event"
               ? { prompt, startAt: toIso(startAt), endAt: toIso(endAt), rewardAmount: reward }
               : mode === "product"
                 ? { prompt }
                 : mode === "engagement"
-                  ? { focus: topic, notes: text }
-                  : { prompt, notes: text };
+                  ? { focus: "all", notes: [topic, text].filter((item) => item.trim()).join("\n"), top: 5 }
+                  : { text: text || topic, textKind: "описание", tone: "деловой", variants: 2 };
       const data = await apex(path, { method: "POST", body: JSON.stringify(body) });
       setResult(data);
       if (mode === "quest" || mode === "survey" || mode === "event" || mode === "product") {
@@ -177,6 +178,15 @@ export function AdminAi() {
         })) as { id?: unknown };
         if (created?.id != null) {
           for (const step of draft.steps) {
+            const action = step.completionType === "automatic" ? automaticActionBody({
+              actionType: String(step.action?.type || ""),
+              targetId: step.action?.targetId as string | number | null,
+              achievementCode: step.action?.achievementCode as string | null,
+              productId: step.action?.productId as string | number | null,
+              minAmount: step.action?.minAmount as string | number | null,
+              count: step.action?.count as string | number | null,
+              requireAvatar: step.action?.requireAvatar as boolean | null,
+            }) : null;
             await apex(`/api/quests/${created.id}/steps`, {
               method: "POST",
               body: JSON.stringify({
@@ -185,7 +195,7 @@ export function AdminAi() {
                 completionType: step.completionType || "manual",
                 sortOrder: step.sortOrder,
                 isRequired: step.isRequired,
-                completionData: step.action ? JSON.stringify(step.action) : null,
+                ...(action ? { completionData: JSON.stringify(action) } : {}),
               }),
             });
           }
@@ -193,6 +203,7 @@ export function AdminAi() {
       }
       toast.success("Создано");
       setDraft(null);
+      setResult(null);
     } catch (reason) {
       toast.error(reason instanceof Error ? reason.message : "Не удалось создать");
     } finally {
@@ -314,6 +325,24 @@ function DraftEditor({
             </Field>
           </div>
         </>
+      ) : null}
+      {draft.questions.length > 0 ? (
+        <ol className="space-y-2">
+          {draft.questions.map((question, index) => (
+            <li key={index} className="rounded-lg bg-card px-3 py-2 text-sm">
+              <p className="text-xs font-semibold text-muted">{index + 1}</p>
+              <TextInput
+                value={question.text}
+                onChange={(event) => {
+                  const questions = draft.questions.slice();
+                  questions[index] = { ...question, text: event.target.value };
+                  onChange({ ...draft, questions });
+                }}
+              />
+              {question.options.length > 0 ? <p className="mt-1 text-xs text-muted">{question.options.join(" · ")}</p> : null}
+            </li>
+          ))}
+        </ol>
       ) : null}
       {draft.steps.length > 0 ? (
         <ul className="space-y-2">

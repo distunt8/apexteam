@@ -62,20 +62,21 @@ function SurveyPage() {
         {survey.questions.length === 0 ? <p className="text-sm text-muted">Вопросов пока нет.</p> : null}
         {locked ? <p className="text-sm text-muted">Ответ уже отправлен.</p> : null}
         {!locked ? (
-          <div className="grid gap-4 md:grid-cols-2">
-            {survey.questions.map((question) => (
-              <div key={question.id} className={question.type === "text" ? "md:col-span-2" : ""}>
+          <ol className="space-y-5">
+            {survey.questions.map((question, index) => (
+              <li key={question.id} className="min-w-0">
+                <p className="mb-2 text-xs font-semibold text-muted">{index + 1}</p>
                 <Question question={question} value={values[question.id]} onChange={(value) => setValues((current) => ({ ...current, [question.id]: value }))} />
-              </div>
+              </li>
             ))}
             {survey.questions.length > 0 ? (
-              <div className="md:col-span-2">
+              <li>
                 <Button disabled={busy} onClick={() => void send()}>
                   {busy ? "Отправляем…" : "Отправить ответы"}
                 </Button>
-              </div>
+              </li>
             ) : null}
-          </div>
+          </ol>
         ) : null}
       </Panel>
     </Shell>

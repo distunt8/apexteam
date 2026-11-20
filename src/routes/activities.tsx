@@ -255,11 +255,18 @@ function StepRow({
         {step.required ? "" : " · необязательный"}
       </p>
       {step.description ? <p className="mt-1 text-sm text-muted">{step.description}</p> : null}
+      {automatic && step.actionText ? <p className="mt-1 text-sm">{step.actionText}</p> : null}
       <p className="mt-1 text-xs text-muted">
         {step.completed ? "Выполнено" : automatic ? "Засчитывается автоматически" : proof ? "Нужно подтверждение" : "Отмечается вручную"}
         {step.proofStatus ? ` · ${proofLabel(step.proofStatus)}` : ""}
       </p>
-      {sent && step.proofPath ? <p className="mt-2 break-all text-sm">{step.proofPath}</p> : null}
+      {sent && step.proofPath ? (
+        <p className="mt-2 text-sm">
+          <a className="font-medium text-brand" href={step.proofPath} target="_blank" rel="noreferrer">
+            {fileName(step.proofPath)}
+          </a>
+        </p>
+      ) : null}
       {sent && step.proofComment ? <p className="mt-1 text-sm text-muted">{step.proofComment}</p> : null}
       {showForm ? (
         <div className="mt-3 grid gap-2">
@@ -280,7 +287,7 @@ function StepRow({
               });
             }}
           />
-          {path ? <a className="break-all text-sm text-brand" href={path}>{uploading ? "Загружаем…" : "Файл прикреплён"}</a> : <p className="text-xs text-muted">{uploading ? "Загружаем…" : "JPEG, PNG, WebP или PDF, до 2 МБ."}</p>}
+          {path ? <p className="text-sm text-muted">{uploading ? "Загружаем…" : fileName(path)}</p> : <p className="text-xs text-muted">{uploading ? "Загружаем…" : "JPEG, PNG, WebP или PDF, до 2 МБ."}</p>}
           <TextArea value={comment} onChange={(event) => setComment(event.target.value)} placeholder="Комментарий" className="min-h-16" />
           <div className="flex flex-wrap gap-2">
             <Button
@@ -505,6 +512,11 @@ function eventStatus(status: string) {
   if (status === "cancelled") return "Запись отменена";
   if (status === "no_show") return "Неявка";
   return "Вы не записаны";
+}
+
+function fileName(path: string) {
+  const clean = decodeURIComponent(path.split("?")[0]?.split("/").pop() || "файл");
+  return clean || "файл";
 }
 
 function proofLabel(status: string) {

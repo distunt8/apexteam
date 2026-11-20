@@ -86,38 +86,19 @@ function Home() {
       <h1 className="text-4xl font-bold">Здравствуйте, {greet}</h1>
       <p className="mt-3 max-w-xl text-base text-muted">Спасибо, что делаете нашу компанию лучше каждый день.</p>
 
-      <div className="mt-8 hidden gap-4 lg:grid lg:grid-cols-4">
-        <div className="col-span-3 min-w-0">
+      <div className="mt-8 grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1fr)_300px]">
+        <div className="order-2 min-w-0 space-y-4 lg:order-1">
           <Leaderboard board={top} full={board} people={people} currentId={user.id} mineLevel={myLevel} caption="Топ по баллам активности за 30 дней" />
-        </div>
-        <div className="col-span-1 min-w-0 space-y-4">
-          <BalanceCard user={user} />
-          <ActivityLevelCard />
-        </div>
-        <div className="col-span-3 min-w-0">
           <ActivitiesPreview items={activities.slice(0, 3)} loading={catalog.status === "loading" || catalog.status === "idle"} />
-        </div>
-        <div className="col-span-1 min-w-0">
-          <Popular products={popular} />
-        </div>
-        <div className="col-span-2 min-w-0">
           <Feed people={people} feed={feed} />
         </div>
-        <div className="col-span-1 min-w-0">{news.length > 0 ? <News items={news} compact /> : null}</div>
-        <div className="col-span-1 min-w-0">
+        <div className="order-1 min-w-0 space-y-4 lg:order-2">
+          <BalanceCard user={user} />
+          <ActivityLevelCard />
+          <Popular products={popular} />
+          {news.length > 0 ? <News items={news} compact /> : null}
           <Achievements items={catalog.achievements.slice(0, 3)} />
         </div>
-      </div>
-
-      <div className="mt-8 space-y-8 lg:hidden">
-        <BalanceCard user={user} />
-        <ActivityLevelCard />
-        <Leaderboard board={top} full={board} people={people} currentId={user.id} mineLevel={myLevel} caption="Топ по баллам активности за 30 дней" />
-        <ActivitiesPreview items={activities.slice(0, 3)} loading={catalog.status === "loading" || catalog.status === "idle"} scroll />
-        <Popular products={popular} />
-        <Feed people={people} feed={feed} />
-        {news.length > 0 ? <News items={news} compact /> : null}
-        <Achievements items={catalog.achievements.slice(0, 3)} />
       </div>
     </Shell>
   );
@@ -254,7 +235,7 @@ function ActivitiesPreview({
       {items.length === 0 ? (
         <p className="mt-3 text-sm text-muted">{loading ? "Загружаем." : "Пока нет активных заданий."}</p>
       ) : (
-        <div className={scroll ? "mt-3 flex gap-3 overflow-x-auto pb-1" : "mt-3 grid grid-cols-3 gap-3"}>
+        <div className={scroll ? "mt-3 flex gap-3 overflow-x-auto pb-1" : "mt-3 grid gap-3 sm:grid-cols-3"}>
           {items.map((item) => (
             <Link
               key={item.id}

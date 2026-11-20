@@ -25,6 +25,7 @@ export function ProductTools({ productId, onVariantCount }: { productId: string;
   const [badgeName, setBadgeName] = useState("");
   const [badgeColor, setBadgeColor] = useState("#306cc0");
   const [discount, setDiscount] = useState(10);
+  const [targetVariant, setTargetVariant] = useState("");
   const reloadCatalog = useStore((state) => state.refresh);
 
   async function reload() {
@@ -157,6 +158,16 @@ export function ProductTools({ productId, onVariantCount }: { productId: string;
         </div>
       </div>
       <h3 className="font-bold">Бейджи и скидки</h3>
+      {variants.length > 0 ? (
+        <select className="h-11 w-full rounded-md border border-line bg-surface px-3 text-sm" value={targetVariant} onChange={(event) => setTargetVariant(event.target.value)} aria-label="Вариант для бейджа и скидки">
+          <option value="">Выберите вариант</option>
+          {variants.map((variant) => (
+            <option key={String(variant.id)} value={String(variant.id)}>{String(variant.name)}</option>
+          ))}
+        </select>
+      ) : (
+        <p className="text-sm text-muted">Вариантов нет — бейдж и скидка будут на весь товар.</p>
+      )}
       <ul className="space-y-1 text-sm">
         {assigned.length === 0 ? <li className="text-muted">На товаре бейджей нет.</li> : null}
         {assigned.map((item) => (
@@ -186,17 +197,16 @@ export function ProductTools({ productId, onVariantCount }: { productId: string;
                 type="button"
                 className="text-xs font-semibold text-brand"
                 onClick={() => {
-                  void apex(`/api/products/${productId}/badges`, { method: "POST", body: JSON.stringify({ badgeId: Number(item.id) }) })
-                    .then(async () => {
-                      await Promise.all(
-                        variants.map((variant) =>
-                          apex(`/api/products/${productId}/badges`, {
-                            method: "POST",
-                            body: JSON.stringify({ badgeId: Number(item.id), productVariantId: Number(variant.id) }),
-                          }).catch(() => undefined),
-                        ),
-                      );
-                      toast.success(variants.length > 0 ? "Бейдж назначен товару и вариантам" : "Бейдж назначен этому товару");
+                  if (variants.length > 0 && !targetVariant) {
+                    toast.error("Выберите вариант");
+                    return;
+                  }
+                  const body = variants.length > 0
+                    ? { badgeId: Number(item.id), productVariantId: Number(targetVariant) }
+                    : { badgeId: Number(item.id), productVariantId: null };
+                  void apex(`/api/products/${productId}/badges`, { method: "POST", body: JSON.stringify(body) })
+                    .then(() => {
+                      toast.success(variants.length > 0 ? "Бейдж назначен выбранному варианту" : "Бейдж назначен товару");
                       return reload();
                     })
                     .catch((error: unknown) => toast.error(error instanceof Error ? error.message : "Не получилось"));
@@ -272,31 +282,27 @@ export function ProductTools({ productId, onVariantCount }: { productId: string;
           </li>
         ))}
       </ul>
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2">
         <NumericInput value={discount} onChange={setDiscount} placeholder="Процент" />
         <Button
           variant="line"
           onClick={() => {
-            void (async () => {
-              const body = {
-                discountPercent: discount,
-                startsAt: new Date().toISOString(),
-                isActive: true,
-              };
-              await apex(`/api/products/${productId}/discounts`, { method: "POST", body: JSON.stringify(body) });
-              if (variants.length > 0) {
-                await Promise.all(
-                  variants.map((variant) =>
-                    apex(`/api/products/${productId}/discounts`, {
-                      method: "POST",
-                      body: JSON.stringify({ ...body, productVariantId: Number(variant.id) }),
-                    }).catch(() => undefined),
-                  ),
-                );
-              }
-              toast.success(variants.length > 0 ? "Скидка применена к товару и всем вариантам" : "Скидка сохранена только для этого товара");
-              await Promise.all([reload(), reloadCatalog()]);
-            })().catch((error: unknown) => toast.error(error instanceof Error ? error.message : "Не получилось"));
+            if (variants.length > 0 && !targetVariant) {
+              toast.error("Выберите вариант");
+              return;
+            }
+            const body = {
+              discountPercent: discount,
+              startsAt: new Date().toISOString(),
+              isActive: true,
+              productVariantId: variants.length > 0 ? Number(targetVariant) : null,
+            };
+            void apex(`/api/products/${productId}/discounts`, { method: "POST", body: JSON.stringify(body) })
+              .then(() => {
+                toast.success(variants.length > 0 ? "Скидка сохранена для выбранного варианта" : "Скидка сохранена на весь товар");
+                return Promise.all([reload(), reloadCatalog()]);
+              })
+              .catch((error: unknown) => toast.error(error instanceof Error ? error.message : "Не получилось"));
           }}
         >
           Сохранить скидку

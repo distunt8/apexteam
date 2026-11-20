@@ -13,6 +13,7 @@ import type {
   Ticket,
   TicketStatus,
 } from "@/lib/store";
+import { describeAutomaticAction } from "@/lib/quest-action";
 
 const TOKEN_KEY = "apex.token";
 
@@ -830,6 +831,7 @@ export interface QuestStepView {
   proofStatus: string;
   proofPath: string;
   proofComment: string;
+  actionText: string;
 }
 
 export interface QuestView {
@@ -990,6 +992,7 @@ function mapQuest(item: unknown, details: unknown): QuestView | null {
         proofStatus: str(row.proofStatus).toLowerCase(),
         proofPath: str(row.proofStoragePath),
         proofComment: str(row.proofComment),
+        actionText: describeAutomaticAction(stepAction(row)),
       };
     })
     .filter((step): step is QuestStepView => Boolean(step))
@@ -1037,6 +1040,18 @@ function mapSurvey(item: unknown, details: unknown): SurveyView | null {
     allowMultiple: Boolean(record.allowMultipleResponses ?? list?.allowMultipleResponses),
     questions,
   };
+}
+
+function stepAction(row: Record<string, unknown>) {
+  if (row.action && typeof row.action === "object") return row.action;
+  if (typeof row.completionData === "string" && row.completionData.trim()) {
+    try {
+      return JSON.parse(row.completionData) as unknown;
+    } catch {
+      return null;
+    }
+  }
+  return null;
 }
 
 function mapEvent(item: unknown, details: unknown): EventView | null {

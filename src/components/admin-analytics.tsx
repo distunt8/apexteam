@@ -116,83 +116,107 @@ export function AdminAnalytics() {
     };
   }, []);
 
-  const maxTrend = Math.max(1, ...trend.map((item) => item.value));
-  const maxDept = Math.max(1, ...departments.map((item) => item.value));
-
   return (
     <div className="space-y-4">
+      <div>
+        <h2 className="text-xl font-bold">Обзор платформы</h2>
+        <p className="mt-1 text-sm text-muted">Сотрудники, вовлечённость и экономика</p>
+      </div>
       {error ? <p className="text-sm text-danger">{error}</p> : null}
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        {cards.map((item) => (
-          <Panel key={item.title} className="p-3">
+        {cards.slice(0, 4).map((item) => (
+          <Panel key={item.title}>
             <p className="text-xs text-muted">{item.title}</p>
-            <p className="mt-1 text-xl font-bold tabular">{item.value}</p>
+            <p className="mt-2 text-2xl font-bold tabular">{item.value}</p>
             {item.hint ? <p className="mt-1 text-xs text-muted">{item.hint}</p> : null}
           </Panel>
         ))}
       </div>
-      <div className="grid gap-4 xl:grid-cols-2">
+      <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1.4fr)_minmax(260px,0.8fr)]">
         <Panel>
           <h2 className="font-bold">Вовлечённость по периодам</h2>
-          {trend.length === 0 ? <p className="mt-3 text-sm text-muted">Нет ряда.</p> : null}
-          <ul className="mt-3 space-y-2">
-            {trend.map((item) => (
-              <li key={item.label} className="grid grid-cols-[88px_minmax(0,1fr)_40px] items-center gap-2 text-sm">
-                <span className="text-muted">{item.label}</span>
-                <span className="h-2 overflow-hidden rounded-full bg-card">
-                  <span className="block h-full rounded-full bg-brand" style={{ width: `${Math.max(4, (item.value / maxTrend) * 100)}%` }} />
-                </span>
-                <span className="tabular text-right font-semibold">{formatNumber(item.value)}</span>
-              </li>
-            ))}
-          </ul>
+          {trend.length === 0 ? <p className="mt-3 text-sm text-muted">Нет ряда.</p> : <TrendChart points={trend} />}
         </Panel>
-        <Panel>
-          <h2 className="font-bold">Отделы</h2>
-          {departments.length === 0 ? <p className="mt-3 text-sm text-muted">Нет данных по отделам.</p> : null}
-          <ul className="mt-3 space-y-2">
-            {departments.map((item) => (
-              <li key={item.label} className="grid grid-cols-[minmax(0,1fr)_minmax(80px,1fr)_40px] items-center gap-2 text-sm">
-                <span className="truncate">{item.label}</span>
-                <span className="h-2 overflow-hidden rounded-full bg-card">
-                  <span className="block h-full rounded-full bg-brand" style={{ width: `${Math.max(4, (item.value / maxDept) * 100)}%` }} />
-                </span>
-                <span className="tabular text-right font-semibold">{formatNumber(item.value)}</span>
-              </li>
-            ))}
-          </ul>
+        <Panel className="space-y-4">
+          <h2 className="font-bold">Состояние платформы</h2>
+          <div>
+            <p className="text-sm font-semibold">Отделы</p>
+            {departments.length === 0 ? <p className="mt-2 text-sm text-muted">Нет данных по отделам.</p> : null}
+            <ul className="mt-2 space-y-2">
+              {departments.slice(0, 4).map((item) => (
+                <li key={item.label} className="text-sm">
+                  <div className="flex justify-between gap-3">
+                    <span className="truncate">{item.label}</span>
+                    <span className="tabular font-semibold">{formatNumber(item.value)}</span>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </div>
+          <div>
+            <p className="text-sm font-semibold">Снижается вовлечённость</p>
+            {declining.length === 0 ? <p className="mt-2 text-sm text-muted">Таких сотрудников нет.</p> : null}
+            <ul className="mt-2 space-y-1">
+              {declining.slice(0, 4).map((item) => (
+                <li key={`${item.name}-${item.department}`} className="flex justify-between gap-3 text-sm">
+                  <span className="min-w-0 truncate">{item.name}</span>
+                  <span className="shrink-0 tabular text-danger">{item.change}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+          <div>
+            <p className="text-sm font-semibold">Наблюдения</p>
+            {insights.length === 0 ? <p className="mt-2 text-sm text-muted">Пока пусто.</p> : null}
+            <ul className="mt-2 space-y-2">
+              {insights.slice(0, 3).map((item) => (
+                <li key={item.title}>
+                  <p className="text-sm font-medium">{item.title}</p>
+                  {item.description ? <p className="mt-1 text-xs text-muted">{item.description}</p> : null}
+                </li>
+              ))}
+            </ul>
+          </div>
         </Panel>
       </div>
-      <div className="grid gap-4 xl:grid-cols-2">
-        <Panel>
-          <h2 className="font-bold">Наблюдения</h2>
-          {insights.length === 0 ? <p className="mt-3 text-sm text-muted">Пока пусто.</p> : null}
-          <ul className="mt-3 space-y-2">
-            {insights.map((item) => (
-              <li key={item.title} className="rounded-lg bg-card px-3 py-2">
-                <p className="text-sm font-semibold">{item.title}</p>
-                {item.description ? <p className="mt-1 text-sm text-muted">{item.description}</p> : null}
-              </li>
-            ))}
-          </ul>
-        </Panel>
-        <Panel>
-          <h2 className="font-bold">Снижается вовлечённость</h2>
-          {declining.length === 0 ? <p className="mt-3 text-sm text-muted">Таких сотрудников нет.</p> : null}
-          <ul className="mt-3 divide-y divide-line">
-            {declining.map((item) => (
-              <li key={`${item.name}-${item.department}`} className="flex items-center justify-between gap-3 py-2 text-sm">
-                <span className="min-w-0">
-                  <span className="block truncate font-medium">{item.name}</span>
-                  <span className="text-xs text-muted">{item.department}</span>
-                </span>
-                <span className="shrink-0 tabular">
-                  {item.score} <span className="text-danger">{item.change}</span>
-                </span>
-              </li>
-            ))}
-          </ul>
-        </Panel>
+      {cards.length > 4 ? (
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {cards.slice(4).map((item) => (
+            <div key={item.title} className="flex items-center justify-between gap-3 rounded-xl border border-line bg-surface px-3 py-2 text-sm">
+              <span className="min-w-0">{item.title}</span>
+              <span className="tabular shrink-0 font-semibold">{item.value}</span>
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function TrendChart({ points }: { points: Bar[] }) {
+  const max = Math.max(1, ...points.map((item) => item.value));
+  const width = 640;
+  const height = 180;
+  const step = points.length > 1 ? width / (points.length - 1) : width;
+  const coords = points.map((item, index) => {
+    const x = points.length > 1 ? index * step : width / 2;
+    const y = height - (item.value / max) * (height - 16) - 8;
+    return { x, y, ...item };
+  });
+  const line = coords.map((item) => `${item.x},${item.y}`).join(" ");
+  const area = `0,${height} ${line} ${width},${height}`;
+  return (
+    <div className="mt-3">
+      <svg viewBox={`0 0 ${width} ${height}`} className="h-44 w-full" role="img" aria-label="График вовлечённости">
+        <polygon points={area} className="fill-brand/15" />
+        <polyline points={line} fill="none" className="stroke-brand" strokeWidth="3" />
+        {coords.map((item) => (
+          <circle key={item.label} cx={item.x} cy={item.y} r="4" className="fill-brand" />
+        ))}
+      </svg>
+      <div className="mt-1 flex justify-between gap-2 text-xs text-muted">
+        <span>{points[0]?.label}</span>
+        <span>{points[points.length - 1]?.label}</span>
       </div>
     </div>
   );

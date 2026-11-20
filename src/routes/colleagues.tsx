@@ -7,7 +7,7 @@ import { Shell } from "@/components/shell";
 import { Button, TextArea, TextInput } from "@/components/ui";
 import { UserAvatar } from "@/components/user-avatar";
 import { formatNumber, pointsLabel } from "@/lib/format";
-import { awardAmounts, hasWorkBalance, PEER_THANKS_AMOUNT, useStore } from "@/lib/store";
+import { awardAmounts, hasWorkBalance, useStore } from "@/lib/store";
 
 export const Route = createFileRoute("/colleagues")({ component: ColleaguesPage });
 
@@ -16,6 +16,7 @@ function ColleaguesPage() {
   const user = useStore((state) => state.people.find((person) => person.id === state.currentUserId));
   const send = useStore((state) => state.sendRecognition);
   const reward = useStore((state) => state.rewardBalance);
+  const thanksAmount = useStore((state) => state.peerThanksAmount);
   const feed = useStore((state) => state.feed);
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<string | null>(null);
@@ -74,7 +75,7 @@ function ColleaguesPage() {
     <Shell mode="top">
       <h1 className="text-3xl font-bold tracking-tight">Коллеги</h1>
       <p className="mt-2 text-sm text-muted">
-        Благодарность не списывает ваши апексы: коллега получает {PEER_THANKS_AMOUNT} {pointsLabel(PEER_THANKS_AMOUNT)}. Одному человеку — только раз в неделю.
+        Благодарность не списывает ваши апексы: коллега получает {thanksAmount} {pointsLabel(thanksAmount)}. Одному человеку — только раз в неделю.
         {canReward ? " Поощрение руководителя списывается с рабочего баланса." : ""}
       </p>
       <p className="mt-2 text-sm">
@@ -84,8 +85,8 @@ function ColleaguesPage() {
         ) : null}
       </p>
 
-      <div className="mt-5 grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
-        <div>
+      <div className="mt-5 grid min-w-0 items-start gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,340px)]">
+        <div className="min-w-0">
           <div className="relative">
             <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted" />
             <TextInput
@@ -102,9 +103,9 @@ function ColleaguesPage() {
               const self = person.id === user.id;
               const on = person.id === selected;
               return (
-                <li key={person.id} className={`rounded-lg px-3 py-3 ${on ? "bg-brand-wash" : "bg-card"}`}>
-                  <div className="flex items-center gap-3">
-                    <UserAvatar user={person} className="size-11" />
+                <li key={person.id} className={`min-w-0 overflow-hidden rounded-lg px-3 py-3 ${on ? "bg-brand-wash" : "bg-card"}`}>
+                  <div className="flex min-w-0 items-center gap-3">
+                    <UserAvatar user={person} className="size-11 shrink-0" />
                     <span className="min-w-0 flex-1">
                       <Link to="/people/$userId" params={{ userId: person.id }} className="block truncate font-semibold hover:text-brand">
                         {person.name}
@@ -115,7 +116,7 @@ function ColleaguesPage() {
                       type="button"
                       disabled={self}
                       onClick={() => setSelected(person.id)}
-                      className="text-sm font-medium text-brand disabled:opacity-50"
+                      className="shrink-0 text-sm font-medium text-brand disabled:opacity-50"
                     >
                       {self ? "Это вы" : on ? "Выбран" : "Спасибо"}
                     </button>
@@ -128,7 +129,7 @@ function ColleaguesPage() {
         </div>
 
         <form
-          className="rounded-xl bg-card p-4 lg:sticky lg:top-20"
+          className="min-w-0 max-w-full rounded-xl bg-card p-4 lg:sticky lg:top-20"
           onSubmit={(event) => {
             event.preventDefault();
             submit();
@@ -161,7 +162,7 @@ function ColleaguesPage() {
             </div>
           ) : (
             <p className="mt-3 text-sm text-muted">
-              {thanked ? "Этому коллеге на этой неделе уже отправлена благодарность." : `Коллега получит ${PEER_THANKS_AMOUNT} ${pointsLabel(PEER_THANKS_AMOUNT)}.`}
+              {thanked ? "Этому коллеге на этой неделе уже отправлена благодарность." : `Коллега получит ${thanksAmount} ${pointsLabel(thanksAmount)}.`}
             </p>
           )}
           <label className="mt-4 block text-sm font-medium">

@@ -26,7 +26,7 @@ function OrdersPage() {
   return (
     <Shell mode="shop">
       <h1 className="text-3xl font-bold tracking-tight">Мои заказы</h1>
-      <p className="mt-2 text-sm text-muted">Пока заказ обрабатывается, его можно отменить — апексы вернутся на баланс.</p>
+      <p className="mt-2 text-sm text-muted">Пока заказ оплачен и ещё не взят в обработку, его можно отменить — апексы вернутся на баланс.</p>
       <label className="mt-4 block text-sm text-muted">
         <span className="sr-only">Сортировка заказов</span>
         <select
@@ -63,7 +63,7 @@ function OrdersPage() {
                   ))}
                 </ul>
                 <p className="mt-3 text-sm font-semibold">Итого {formatPoints(order.total)}</p>
-                {order.status === "processing" ? (
+                {order.status === "paid" ? (
                   <Button
                     className="mt-3"
                     variant="line"

@@ -1,11 +1,12 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { AchievementMark } from "@/components/achievement-mark";
+import { ActivityLevelCard } from "@/components/activity-level";
 import { Shell } from "@/components/shell";
 import { Panel } from "@/components/ui";
 import { UserAvatar } from "@/components/user-avatar";
-import { achievementIconUrl, apex, readThanks } from "@/lib/apex";
-import { formatDateTime, formatNumber } from "@/lib/format";
+import { achievementIconUrl, apex, mapEngagement, readThanks } from "@/lib/apex";
+import { formatDateTime } from "@/lib/format";
 import { ROLE_LABEL } from "@/lib/labels";
 import { useStore, type FeedItem } from "@/lib/store";
 
@@ -15,11 +16,10 @@ function PersonPage() {
   const { userId } = Route.useParams();
   const person = useStore((state) => state.people.find((item) => item.id === userId));
   const me = useStore((state) => state.currentUserId);
-  const board = useStore((state) => state.leaderboard);
-  const kind = useStore((state) => state.leaderboardKind);
   const feed = useStore((state) => state.feed);
   const people = useStore((state) => state.people);
-  const engagement = useStore((state) => state.engagement);
+  const myEngagement = useStore((state) => state.engagement);
+  const [otherLevel, setOtherLevel] = useState("");
   const [badges, setBadges] = useState<{ id: string; name: string; iconUrl: string }[]>([]);
   const [thanks, setThanks] = useState<FeedItem[]>([]);
   useEffect(() => {
@@ -47,7 +47,21 @@ function PersonPage() {
       })
       .catch(() => setBadges([]));
   }, [userId]);
-  const score = board.find((item) => item.id === userId)?.score ?? person?.score ?? 0;
+  useEffect(() => {
+    if (userId === me) return;
+    let ignore = false;
+    void apex(`/api/users/${userId}/engagement`)
+      .then((data) => {
+        if (!ignore) setOtherLevel(mapEngagement(data)?.title ?? "");
+      })
+      .catch(() => {
+        if (!ignore) setOtherLevel("");
+      });
+    return () => {
+      ignore = true;
+    };
+  }, [userId, me]);
+  const levelTitle = userId === me ? myEngagement?.title ?? "" : otherLevel;
 
   return (
     <Shell>
@@ -72,11 +86,15 @@ function PersonPage() {
                 </p>
               </div>
             </div>
-            <p className="mt-4 text-sm">
-              {person.id === me && engagement
-                ? <>Уровень активности: <span className="font-semibold">{engagement.title}</span></>
-                : <>{kind === "level" ? "Индекс активности" : "Благодарности в рейтинге"}: <span className="font-semibold">{formatNumber(score)}</span></>}
-            </p>
+            {userId === me ? (
+              <div className="mt-4">
+                <ActivityLevelCard link={false} className="h-auto" />
+              </div>
+            ) : levelTitle ? (
+              <p className="mt-4 text-sm">
+                Уровень активности: <span className="font-semibold">{levelTitle}</span>
+              </p>
+            ) : null}
             {person.status !== "active" ? <p className="mt-2 text-sm text-muted">Аккаунт заблокирован</p> : null}
             {person.id === me ? (
               <Link to="/profile" className="mt-4 inline-block text-sm font-semibold text-brand">

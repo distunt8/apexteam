@@ -446,7 +446,22 @@ function People() {
           <TextInput type="email" value={email} onChange={(event) => setEmail(event.target.value)} required />
         </Field>
         <Field label="Временный пароль">
-          <TextInput type="text" value={password} onChange={(event) => setPassword(event.target.value)} required />
+          <div className="flex gap-2">
+            <TextInput type="text" value={password} onChange={(event) => setPassword(event.target.value)} required />
+            <Button
+              type="button"
+              variant="line"
+              className="shrink-0"
+              onClick={() => {
+                const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
+                const bytes = new Uint32Array(10);
+                crypto.getRandomValues(bytes);
+                setPassword(Array.from(bytes, (value) => alphabet[value % alphabet.length]).join(""));
+              }}
+            >
+              Сгенерировать пароль
+            </Button>
+          </div>
         </Field>
         <Field label="Фамилия">
           <TextInput value={lastName} onChange={(event) => setLastName(event.target.value)} required />
@@ -637,6 +652,9 @@ function Economy() {
   const ledger = useStore((state) => state.allLedger);
   const loadAllLedger = useStore((state) => state.loadAllLedger);
   const adjust = useStore((state) => state.adjustBalance);
+  const thanksAmount = useStore((state) => state.peerThanksAmount);
+  const setThanksAmount = useStore((state) => state.setPeerThanksAmount);
+  const [thanksDraft, setThanksDraft] = useState(thanksAmount);
   const [userId, setUserId] = useState(people[0]?.id ?? "");
   const [amount, setAmount] = useState(100);
   const [reason, setReason] = useState("");
@@ -660,6 +678,28 @@ function Economy() {
   }, [loadAllLedger]);
   return (
     <div className="space-y-4">
+      <form
+        className="space-y-3 rounded-lg bg-card p-4"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (!Number.isInteger(thanksDraft) || thanksDraft < 1) {
+            toast.error("Укажите целое число апексов больше нуля");
+            return;
+          }
+          setThanksAmount(thanksDraft);
+          toast.success("Сумма благодарности сохранена");
+        }}
+      >
+        <h2 className="font-bold">Личная благодарность</h2>
+        <p className="text-sm text-muted">Сколько апексов получает коллега, когда ему говорят спасибо. С личного баланса отправителя ничего не списывается.</p>
+        <Field label="Апексов за благодарность">
+          <NumericInput value={thanksDraft} onChange={setThanksDraft} />
+        </Field>
+        <div className="flex gap-2">
+          <Button type="submit">Сохранить</Button>
+          <Button type="button" variant="line" onClick={() => setThanksDraft(thanksAmount)}>Отмена</Button>
+        </div>
+      </form>
       <form
         className="space-y-3 rounded-lg bg-card p-4"
         onSubmit={(event) => {

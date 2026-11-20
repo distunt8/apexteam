@@ -71,15 +71,15 @@ function ProfilePage() {
             </p>
           </div>
         </div>
-        <div className="mt-4 grid items-stretch gap-3 sm:grid-cols-2">
-          <Panel className="h-full">
+        <div className="mt-4 grid items-start gap-3 sm:grid-cols-2">
+          <Panel>
             <p className="text-xs text-muted">Баланс</p>
             <p className="text-xl font-bold text-brand">{formatPoints(user.balance)}</p>
             {hasWorkBalance(user.role) ? (
               <p className="mt-1 text-sm text-muted">Рабочий: {reward == null ? "нет доступа" : formatNumber(reward)}</p>
             ) : null}
           </Panel>
-          <ActivityLevelCard link={false} />
+          <ActivityLevelCard link={false} className="h-auto" />
         </div>
       </div>
 

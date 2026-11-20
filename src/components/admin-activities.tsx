@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { Button, Field, NumericInput, TextArea, TextInput } from "@/components/ui";
 import { apex, listOf } from "@/lib/apex";
 import { formatNumber } from "@/lib/format";
+import { automaticActionBody } from "@/lib/quest-action";
 import { useStore } from "@/lib/store";
 
 type Kind = "quests" | "surveys" | "events" | "achievements" | "proofs";
@@ -381,29 +382,19 @@ export function AdminActivities() {
       toast.error("Укажите название шага");
       return;
     }
+    const action = stepDraft.completionType === "automatic" ? automaticActionBody(stepDraft) : null;
+    if (stepDraft.completionType === "automatic" && !stepDraft.actionType) {
+      toast.error("Выберите шаблон автоматического шага");
+      return;
+    }
     const body = {
       title: stepDraft.title.trim(),
       description: stepDraft.description.trim(),
       completionType: stepDraft.completionType,
       sortOrder: stepDraft.sortOrder,
       isRequired: stepDraft.required,
-      completionData:
-        stepDraft.completionType === "automatic"
-          ? JSON.stringify({
-              type: stepDraft.actionType,
-              targetId: stepDraft.targetId ? Number(stepDraft.targetId) : null,
-              achievementCode: stepDraft.achievementCode || null,
-              productId: stepDraft.productId ? Number(stepDraft.productId) : null,
-              minAmount: stepDraft.minAmount ? Number(stepDraft.minAmount) : null,
-              count: stepDraft.count ? Number(stepDraft.count) : null,
-              requireAvatar: stepDraft.actionType === "complete_profile" ? stepDraft.requireAvatar : null,
-            })
-          : null,
+      ...(action ? { completionData: JSON.stringify(action) } : {}),
     };
-    if (stepDraft.completionType === "automatic" && !stepDraft.actionType) {
-      toast.error("Выберите шаблон автоматического шага");
-      return;
-    }
     try {
       await apex(stepDraft.id ? `/api/quests/${draft.id}/steps/${stepDraft.id}` : `/api/quests/${draft.id}/steps`, {
         method: stepDraft.id ? "PUT" : "POST",
