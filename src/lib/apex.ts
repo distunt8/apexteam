@@ -504,16 +504,8 @@ function mapBoard(raw: unknown): BoardRow | null {
   return {
     id,
     name: str(record.fullName || record.name || record.userName || nested || "Сотрудник"),
-    score: num(
-      record.thanksCount ??
-        record.thanks ??
-        record.score ??
-        record.points ??
-        record.totalPoints ??
-        record.total ??
-        record.amount ??
-        record.value,
-    ),
+    score: num(record.score ?? record.points ?? record.totalPoints ?? record.total ?? record.amount ?? record.value),
+    level: str(record.statusTitle || record.levelTitle || record.level || ""),
   };
 }
 
@@ -745,17 +737,19 @@ export async function loadWorkspace(): Promise<Workspace> {
       levelTotals.set(id, (levelTotals.get(id) ?? 0) + amount);
     }
   }
-  const leaderboardKind = allTxRes.ok ? "level" : "thanks";
+  const leaderboardKind = thanksBoard.length > 0 || allTxRes.ok ? "level" : "thanks";
   const leaderboard =
-    leaderboardKind === "level"
-      ? [...levelTotals.entries()]
-          .map(([id, score]) => ({
-            id,
-            name: people.get(id)?.name || "Сотрудник",
-            score: Math.round(score),
-          }))
-          .sort((a, b) => b.score - a.score || a.name.localeCompare(b.name, "ru"))
-      : thanksBoard;
+    thanksBoard.length > 0
+      ? thanksBoard
+      : allTxRes.ok
+        ? [...levelTotals.entries()]
+            .map(([id, score]) => ({
+              id,
+              name: people.get(id)?.name || "Сотрудник",
+              score: Math.round(score),
+            }))
+            .sort((a, b) => b.score - a.score || a.name.localeCompare(b.name, "ru"))
+        : thanksBoard;
   for (const row of leaderboard) {
     const person = people.get(row.id);
     if (person) person.score = row.score;

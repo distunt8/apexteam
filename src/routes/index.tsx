@@ -86,15 +86,15 @@ function Home() {
       <h1 className="text-4xl font-bold">Здравствуйте, {greet}</h1>
       <p className="mt-3 max-w-xl text-base text-muted">Спасибо, что делаете нашу компанию лучше каждый день.</p>
 
-      <div className="mt-8 grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1fr)_300px]">
+      <div className="mt-8 grid min-w-0 items-start gap-4 lg:grid-cols-[minmax(0,1fr)_300px]">
         <div className="order-2 min-w-0 space-y-4 lg:order-1">
-          <Leaderboard board={top} full={board} people={people} currentId={user.id} mineLevel={myLevel} caption="Топ по баллам активности за 30 дней" />
+          <Leaderboard board={top} full={board} people={people} currentId={user.id} mineLevel={myLevel} caption="Топ по уровню активности" />
           <ActivitiesPreview items={activities.slice(0, 3)} loading={catalog.status === "loading" || catalog.status === "idle"} />
           <Feed people={people} feed={feed} />
         </div>
         <div className="order-1 min-w-0 space-y-4 lg:order-2">
           <BalanceCard user={user} />
-          <ActivityLevelCard />
+          <ActivityLevelCard className="h-auto" />
           <Popular products={popular} />
           {news.length > 0 ? <News items={news} compact /> : null}
           <Achievements items={catalog.achievements.slice(0, 3)} />
@@ -112,8 +112,8 @@ function Leaderboard({
   caption,
   mineLevel,
 }: {
-  board: { id: string; name: string; score: number }[];
-  full: { id: string; name: string; score: number }[];
+  board: { id: string; name: string; score: number; level?: string }[];
+  full: { id: string; name: string; score: number; level?: string }[];
   people: Person[];
   currentId: string;
   caption: string;
@@ -137,7 +137,7 @@ function Leaderboard({
               place={index + 1}
               people={people}
               mine={person.id === currentId}
-              level={person.id === currentId ? mineLevel : ""}
+              level={person.level || (person.id === currentId ? mineLevel : "")}
             />
           ))}
         </ol>
@@ -145,7 +145,7 @@ function Leaderboard({
       {!shown && me ? (
         <div className="mt-3 border-t border-dashed border-line pt-3">
           <LeaderRow
-            person={{ id: me.id, name: me.name, score: full[mineAt]?.score ?? me.score }}
+            person={{ id: me.id, name: me.name, score: full[mineAt]?.score ?? me.score, level: full[mineAt]?.level }}
             place={mineAt >= 0 ? mineAt + 1 : full.length + 1}
             people={people}
             mine
@@ -164,7 +164,7 @@ function LeaderRow({
   mine,
   level,
 }: {
-  person: { id: string; name: string; score: number };
+  person: { id: string; name: string; score: number; level?: string };
   place: number;
   people: Person[];
   mine: boolean;

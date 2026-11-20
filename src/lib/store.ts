@@ -83,6 +83,7 @@ export interface BoardRow {
   id: string;
   name: string;
   score: number;
+  level?: string;
 }
 
 export interface Product {
