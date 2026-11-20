@@ -356,8 +356,8 @@ interface Actions {
     firstName: string;
     lastName: string;
     middleName?: string;
-    department: string;
-    position: string;
+    departmentId: number;
+    positionId: number;
   }) => Promise<Result>;
   loadActivities: () => Promise<void>;
   loadEngagement: () => Promise<void>;
@@ -665,10 +665,11 @@ export const useStore = create<AppState & Actions>()(
         const email = input.email.trim();
         const firstName = input.firstName.trim();
         const lastName = input.lastName.trim();
-        const department = input.department.trim();
-        const position = input.position.trim();
-        if (!email || !firstName || !lastName || !department || !position) {
-          return { ok: false as const, error: "Заполните почту, имя, фамилию, отдел и должность" };
+        if (!email || !firstName || !lastName) {
+          return { ok: false as const, error: "Заполните почту, имя и фамилию" };
+        }
+        if (!Number.isInteger(input.departmentId) || !Number.isInteger(input.positionId)) {
+          return { ok: false as const, error: "Выберите отдел и должность" };
         }
         if (input.password.trim().length < 6) return { ok: false as const, error: "Пароль короче 6 символов" };
         return commit(set, async () => {
@@ -680,8 +681,8 @@ export const useStore = create<AppState & Actions>()(
               firstName,
               lastName,
               middleName: input.middleName?.trim() || null,
-              department,
-              position,
+              departmentId: input.departmentId,
+              positionId: input.positionId,
             }),
           });
         });

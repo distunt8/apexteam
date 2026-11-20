@@ -10,6 +10,7 @@ import { NewsDesk, ProductTools } from "@/components/product-tools";
 import { UserAvatar } from "@/components/user-avatar";
 import { Shell } from "@/components/shell";
 import { Button, Field, NumericInput, TextArea, TextInput } from "@/components/ui";
+import { apex } from "@/lib/apex";
 import { formatNumber } from "@/lib/format";
 import { categoryLabel, ENTRY_LABEL, ORDER_FLOW, orderStatusLabel, ROLE_LABEL, roleCodeLabel, TICKET_STATUS } from "@/lib/labels";
 import {
@@ -405,8 +406,12 @@ function People() {
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [middleName, setMiddleName] = useState("");
-  const [department, setDepartment] = useState("");
-  const [position, setPosition] = useState("");
+  const [departmentId, setDepartmentId] = useState("");
+  const [positionId, setPositionId] = useState("");
+  const [directories, setDirectories] = useState<{ departments: { id: number; name: string }[]; positions: { id: number; name: string }[] }>({
+    departments: [],
+    positions: [],
+  });
   const [pending, setPending] = useState(false);
   const [edit, setEdit] = useState({
     id: "",
@@ -419,6 +424,29 @@ function People() {
   const editing = people.find((person) => person.id === edit.id);
   const canCreate = me?.role !== "manager";
 
+  useEffect(() => {
+    if (!canCreate) return;
+    let ignore = false;
+    void Promise.all([apex("/api/departments"), apex("/api/positions")])
+      .then(([departmentRows, positionRows]) => {
+        if (ignore) return;
+        const asOptions = (data: unknown) =>
+          (Array.isArray(data) ? data : [])
+            .flatMap((item) => {
+              if (!item || typeof item !== "object") return [];
+              const row = item as { id?: unknown; name?: unknown; isActive?: unknown };
+              if (row.isActive === false || row.id == null) return [];
+              return [{ id: Number(row.id), name: String(row.name || "") }];
+            })
+            .filter((item) => item.name && Number.isInteger(item.id));
+        setDirectories({ departments: asOptions(departmentRows), positions: asOptions(positionRows) });
+      })
+      .catch(() => undefined);
+    return () => {
+      ignore = true;
+    };
+  }, [canCreate]);
+
   return (
     <div>
       {canCreate ? (
@@ -427,7 +455,15 @@ function People() {
         onSubmit={(event) => {
           event.preventDefault();
           setPending(true);
-          void createEmployee({ email, password, firstName, lastName, middleName, department, position }).then((result) => {
+          void createEmployee({
+            email,
+            password,
+            firstName,
+            lastName,
+            middleName,
+            departmentId: Number(departmentId),
+            positionId: Number(positionId),
+          }).then((result) => {
             setPending(false);
             if (!result.ok) toast.error(result.error);
             else {
@@ -437,6 +473,8 @@ function People() {
               setFirstName("");
               setLastName("");
               setMiddleName("");
+              setDepartmentId("");
+              setPositionId("");
             }
           });
         }}
@@ -472,8 +510,26 @@ function People() {
         <Field label="Отчество">
           <TextInput value={middleName} onChange={(event) => setMiddleName(event.target.value)} />
         </Field>
-        <OptionField label="Отдел" value={department} options={[...new Set(people.map((person) => person.department.trim()).filter(Boolean))].sort()} onChange={setDepartment} />
-        <OptionField label="Должность" value={position} options={[...new Set(people.map((person) => person.position.trim()).filter(Boolean))].sort()} onChange={setPosition} />
+        <Field label="Отдел">
+          <select className="h-11 w-full rounded-md border border-line bg-surface px-3 text-sm" value={departmentId} onChange={(event) => setDepartmentId(event.target.value)} required>
+            <option value="">Выберите отдел</option>
+            {directories.departments.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.name}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field label="Должность">
+          <select className="h-11 w-full rounded-md border border-line bg-surface px-3 text-sm" value={positionId} onChange={(event) => setPositionId(event.target.value)} required>
+            <option value="">Выберите должность</option>
+            {directories.positions.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.name}
+              </option>
+            ))}
+          </select>
+        </Field>
         <div className="flex flex-wrap gap-2 sm:col-span-2">
           <Button type="submit" disabled={pending} className="sm:w-auto">
             Создать
@@ -487,8 +543,8 @@ function People() {
               setFirstName("");
               setLastName("");
               setMiddleName("");
-              setDepartment("");
-              setPosition("");
+              setDepartmentId("");
+              setPositionId("");
             }}
           >
             Отмена

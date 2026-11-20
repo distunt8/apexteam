@@ -8,6 +8,11 @@ type Insight = { title: string; description: string; severity: string };
 type Bar = { label: string; value: number };
 type PersonRow = { name: string; department: string; score: string; change: string };
 
+function metricValue(value: number, unit: unknown) {
+  if (unit === "rate") return `${formatNumber(Math.round(value * 1000) / 10)}%`;
+  return formatNumber(value);
+}
+
 function num(value: unknown) {
   const parsed = typeof value === "number" ? value : Number(value);
   return Number.isFinite(parsed) ? parsed : null;
@@ -23,7 +28,7 @@ function metricsOf(data: unknown, key: string): Metric[] {
     return [
       {
         title: String(row.title || row.code || "Показатель"),
-        value: value == null ? "—" : `${formatNumber(value)}${row.unit ? ` ${row.unit}` : ""}`,
+        value: value == null ? "—" : metricValue(value, row.unit),
         hint: row.isReliable === false ? String(row.unavailableReason || "Мало данных") : "",
       },
     ];

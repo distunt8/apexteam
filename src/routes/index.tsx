@@ -2,7 +2,6 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { Gem } from "lucide-react";
 import { useEffect, useState } from "react";
 import { ActivityLevelCard } from "@/components/activity-level";
-import { AchievementMark } from "@/components/achievement-mark";
 import { UserAvatar } from "@/components/user-avatar";
 import { Shell } from "@/components/shell";
 import { Button, Panel } from "@/components/ui";
@@ -97,7 +96,6 @@ function Home() {
           <ActivityLevelCard className="h-auto" />
           <Popular products={popular} />
           {news.length > 0 ? <News items={news} compact /> : null}
-          <Achievements items={catalog.achievements.slice(0, 3)} />
         </div>
       </div>
     </Shell>
@@ -249,23 +247,6 @@ function ActivitiesPreview({
           ))}
         </div>
       )}
-    </section>
-  );
-}
-
-function Achievements({ items }: { items: { id: string; name: string; earned: boolean; iconUrl?: string }[] }) {
-  if (items.length === 0) return null;
-  return (
-    <section>
-      <h2 className="text-xl font-bold">Достижения</h2>
-      <div className="mt-3 grid grid-cols-3 gap-3">
-        {items.map((item) => (
-          <Link key={item.id} to="/activities" search={{ kind: "achievement", focus: `achievement-${item.id}` }} className="rounded-xl border border-line bg-surface px-2 py-4 text-center shadow-sm transition hover:-translate-y-0.5 hover:border-brand-mid hover:shadow-md">
-            <AchievementMark iconUrl={item.iconUrl} earned={item.earned} className="mx-auto size-8" />
-            <p className="mt-2 text-xs leading-tight">{item.name}</p>
-          </Link>
-        ))}
-      </div>
     </section>
   );
 }
