@@ -413,19 +413,12 @@ function People() {
     positions: [],
   });
   const [pending, setPending] = useState(false);
-  const [edit, setEdit] = useState({
-    id: "",
-    firstName: "",
-    lastName: "",
-    middleName: "",
-    department: "",
-    position: "",
-  });
+  const blankPerson = { id: "", firstName: "", lastName: "", middleName: "", departmentId: "", positionId: "" };
+  const [edit, setEdit] = useState(blankPerson);
   const editing = people.find((person) => person.id === edit.id);
   const canCreate = me?.role !== "manager";
 
   useEffect(() => {
-    if (!canCreate) return;
     let ignore = false;
     void Promise.all([apex("/api/departments"), apex("/api/positions")])
       .then(([departmentRows, positionRows]) => {
@@ -445,7 +438,7 @@ function People() {
     return () => {
       ignore = true;
     };
-  }, [canCreate]);
+  }, []);
 
   return (
     <div>
@@ -557,11 +550,15 @@ function People() {
           className="mb-4 grid gap-3 rounded-xl border-2 border-brand bg-brand-wash p-4 shadow-md sm:grid-cols-2"
           onSubmit={(event) => {
             event.preventDefault();
-            void updateEmployee(edit).then((result) => {
+            void updateEmployee({
+              ...edit,
+              departmentId: Number(edit.departmentId),
+              positionId: Number(edit.positionId),
+            }).then((result) => {
               if (!result.ok) toast.error(result.error);
               else {
                 toast.success("Данные сотрудника сохранены");
-                setEdit({ id: "", firstName: "", lastName: "", middleName: "", department: "", position: "" });
+                setEdit(blankPerson);
               }
             });
           }}
@@ -577,17 +574,27 @@ function People() {
             <TextInput value={edit.middleName} onChange={(event) => setEdit({ ...edit, middleName: event.target.value })} />
           </Field>
           <Field label="Отдел">
-            <TextInput value={edit.department} onChange={(event) => setEdit({ ...edit, department: event.target.value })} required />
+            <select className="h-11 w-full rounded-md border border-line bg-surface px-3 text-sm" value={edit.departmentId} onChange={(event) => setEdit({ ...edit, departmentId: event.target.value })} required>
+              <option value="">Выберите отдел</option>
+              {directories.departments.map((item) => (
+                <option key={item.id} value={item.id}>{item.name}</option>
+              ))}
+            </select>
           </Field>
           <Field label="Должность">
-            <TextInput value={edit.position} onChange={(event) => setEdit({ ...edit, position: event.target.value })} required />
+            <select className="h-11 w-full rounded-md border border-line bg-surface px-3 text-sm" value={edit.positionId} onChange={(event) => setEdit({ ...edit, positionId: event.target.value })} required>
+              <option value="">Выберите должность</option>
+              {directories.positions.map((item) => (
+                <option key={item.id} value={item.id}>{item.name}</option>
+              ))}
+            </select>
           </Field>
           <div className="flex gap-2 sm:col-span-2">
             <Button type="submit">Сохранить</Button>
             <Button
               type="button"
               variant="line"
-              onClick={() => setEdit({ id: "", firstName: "", lastName: "", middleName: "", department: "", position: "" })}
+              onClick={() => setEdit(blankPerson)}
             >
               Отмена
             </Button>
@@ -642,8 +649,8 @@ function People() {
                           firstName: person.firstName ?? "",
                           lastName: person.lastName ?? "",
                           middleName: person.middleName ?? "",
-                          department: person.department,
-                          position: person.position,
+                          departmentId: String(directories.departments.find((item) => item.name === person.department)?.id ?? ""),
+                          positionId: String(directories.positions.find((item) => item.name === person.position)?.id ?? ""),
                         });
                       }}
                     >
@@ -711,6 +718,8 @@ function Economy() {
   const thanksAmount = useStore((state) => state.peerThanksAmount);
   const setThanksAmount = useStore((state) => state.setPeerThanksAmount);
   const [thanksDraft, setThanksDraft] = useState(thanksAmount);
+  const [grantAmount, setGrantAmount] = useState(500);
+  const [grantPeriod, setGrantPeriod] = useState("month");
   const [userId, setUserId] = useState(people[0]?.id ?? "");
   const [amount, setAmount] = useState(100);
   const [reason, setReason] = useState("");
@@ -728,6 +737,10 @@ function Economy() {
     });
   const ledgerPage = usePage(sorted, 8, `${ledgerQuery}|${ledgerType}`);
   useEffect(() => {
+    const savedAmount = Number(localStorage.getItem("apex-manager-grant"));
+    const savedPeriod = localStorage.getItem("apex-manager-grant-period");
+    if (Number.isInteger(savedAmount) && savedAmount > 0) setGrantAmount(savedAmount);
+    if (savedPeriod === "week" || savedPeriod === "month" || savedPeriod === "year") setGrantPeriod(savedPeriod);
     void loadAllLedger().catch((reason: unknown) => {
       setError(reason instanceof Error ? reason.message : "Не удалось загрузить транзакции");
     });
@@ -755,6 +768,33 @@ function Economy() {
           <Button type="submit">Сохранить</Button>
           <Button type="button" variant="line" onClick={() => setThanksDraft(thanksAmount)}>Отмена</Button>
         </div>
+      </form>
+      <form
+        className="space-y-3 rounded-lg bg-card p-4"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (!Number.isInteger(grantAmount) || grantAmount < 1) {
+            toast.error("Укажите целое число апексов больше нуля");
+            return;
+          }
+          localStorage.setItem("apex-manager-grant", String(grantAmount));
+          localStorage.setItem("apex-manager-grant-period", grantPeriod);
+          toast.success("Настройка начисления принята");
+        }}
+      >
+        <h2 className="font-bold">Начисление рабочего баланса</h2>
+        <p className="text-sm text-muted">Сколько апексов руководитель получает на рабочий баланс для поощрений и как часто это происходит.</p>
+        <Field label="Апексов за период">
+          <NumericInput value={grantAmount} onChange={setGrantAmount} />
+        </Field>
+        <Field label="Период">
+          <select className="h-11 w-full rounded-md border border-line bg-surface px-3 text-sm" value={grantPeriod} onChange={(event) => setGrantPeriod(event.target.value)}>
+            <option value="week">Неделя</option>
+            <option value="month">Месяц</option>
+            <option value="year">Год</option>
+          </select>
+        </Field>
+        <Button type="submit">Сохранить</Button>
       </form>
       <form
         className="space-y-3 rounded-lg bg-card p-4"

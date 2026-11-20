@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Pencil } from "lucide-react";
 import { toast } from "sonner";
 import { Button, Field, NumericInput, TextArea, TextInput } from "@/components/ui";
 import { apex } from "@/lib/apex";
@@ -26,7 +27,9 @@ export function ProductTools({ productId, onVariantCount }: { productId: string;
   const [badgeColor, setBadgeColor] = useState("#306cc0");
   const [discount, setDiscount] = useState(10);
   const [targetVariant, setTargetVariant] = useState("");
+  const [uploadingId, setUploadingId] = useState("");
   const reloadCatalog = useStore((state) => state.refresh);
+  const uploadImage = useStore((state) => state.uploadImage);
 
   async function reload() {
     const [variantRows, categoryRows, badgeRows, assignedRows, discountRows] = await Promise.all([
@@ -73,20 +76,59 @@ export function ProductTools({ productId, onVariantCount }: { productId: string;
                   <td className="py-2 pr-2">{String(item.price ?? "")}</td>
                   <td className="py-2 pr-2">{String(item.stock ?? "")}</td>
                   <td className="py-2">
-                    <button
-                      type="button"
-                      className="font-semibold text-danger"
-                      onClick={() => {
-                        void apex(`/api/products/${productId}/variants/${item.id}`, { method: "DELETE" })
-                          .then(() => {
-                            toast.success("Вариант удалён");
-                            return reload();
-                          })
-                          .catch((error: unknown) => toast.error(error instanceof Error ? error.message : "Не получилось"));
-                      }}
-                    >
-                      Удалить
-                    </button>
+                    <div className="flex flex-wrap items-center gap-3">
+                      <label className="cursor-pointer text-sm font-semibold text-brand">
+                        {uploadingId === String(item.id) ? "Загружаем…" : "Сменить фото"}
+                        <input
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp"
+                          className="sr-only"
+                          disabled={uploadingId === String(item.id)}
+                          onChange={(event) => {
+                            const file = event.target.files?.[0];
+                            event.target.value = "";
+                            if (!file) return;
+                            const variantId = String(item.id);
+                            setUploadingId(variantId);
+                            void uploadImage(file, "products")
+                              .then((result) => {
+                                if (!result.ok || !result.url) throw new Error(result.ok ? "Сервер не вернул ссылку" : result.error);
+                                return apex(`/api/products/${productId}/variants/${variantId}`, {
+                                  method: "PUT",
+                                  body: JSON.stringify({
+                                    name: item.name,
+                                    categoryId: item.categoryId ?? null,
+                                    imageUrl: result.url,
+                                    price: Number(item.price ?? 0),
+                                    stock: Number(item.stock ?? 0),
+                                    isActive: item.isActive !== false,
+                                  }),
+                                });
+                              })
+                              .then(() => {
+                                toast.success("Фото варианта обновлено");
+                                return reload();
+                              })
+                              .catch((error: unknown) => toast.error(error instanceof Error ? error.message : "Не получилось"))
+                              .finally(() => setUploadingId(""));
+                          }}
+                        />
+                      </label>
+                      <button
+                        type="button"
+                        className="font-semibold text-danger"
+                        onClick={() => {
+                          void apex(`/api/products/${productId}/variants/${item.id}`, { method: "DELETE" })
+                            .then(() => {
+                              toast.success("Вариант удалён");
+                              return reload();
+                            })
+                            .catch((error: unknown) => toast.error(error instanceof Error ? error.message : "Не получилось"));
+                        }}
+                      >
+                        Удалить
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -319,6 +361,7 @@ export function NewsDesk() {
   const [summary, setSummary] = useState("");
   const [content, setContent] = useState("");
   const [imageUrl, setImageUrl] = useState("");
+  const [editingId, setEditingId] = useState("");
   const [uploading, setUploading] = useState(false);
   const [items, setItems] = useState<Row[]>([]);
 
@@ -327,6 +370,7 @@ export function NewsDesk() {
     setSummary("");
     setContent("");
     setImageUrl("");
+    setEditingId("");
   }
 
   function load() {
@@ -342,19 +386,20 @@ export function NewsDesk() {
         className="space-y-3 rounded-xl border-2 border-brand bg-brand-wash p-4 shadow-md"
         onSubmit={(event) => {
           event.preventDefault();
-          void apex("/api/company-news", {
-            method: "POST",
-            body: JSON.stringify({ title, summary, content, imageUrl: imageUrl || null }),
-          })
+          const body = JSON.stringify({ title, summary, content, imageUrl: imageUrl || null });
+          const request = editingId
+            ? apex(`/api/company-news/${editingId}`, { method: "PUT", body })
+            : apex("/api/company-news", { method: "POST", body });
+          void request
             .then(() => {
               clear();
-              toast.success("Новость опубликована");
+              toast.success(editingId ? "Новость сохранена" : "Новость опубликована");
               load();
             })
             .catch((error: unknown) => toast.error(error instanceof Error ? error.message : "Не получилось"));
         }}
       >
-        <h2 className="font-bold">Новая новость</h2>
+        <h2 className="font-bold">{editingId ? "Редактирование новости" : "Новая новость"}</h2>
         <Field label="Заголовок"><TextInput value={title} onChange={(event) => setTitle(event.target.value)} required /></Field>
         <Field label="Коротко"><TextInput value={summary} onChange={(event) => setSummary(event.target.value)} /></Field>
         <Field label="Текст"><TextArea value={content} onChange={(event) => setContent(event.target.value)} /></Field>
@@ -382,15 +427,59 @@ export function NewsDesk() {
           </label>
         </Field>
         <div className="flex flex-wrap gap-2">
-          <Button type="submit" disabled={uploading}>Опубликовать</Button>
+          <Button type="submit" disabled={uploading}>{editingId ? "Сохранить" : "Опубликовать"}</Button>
           <Button type="button" variant="line" onClick={clear}>Отмена</Button>
         </div>
       </form>
       <ul className="space-y-2">
         {items.map((item) => (
-          <li key={String(item.id)} className="rounded-xl border border-line bg-gradient-to-r from-brand-wash to-surface px-4 py-3">
-            <p className="font-semibold">{String(item.title)}</p>
-            <p className="mt-1 text-sm text-muted">{String(item.summary || "")}</p>
+          <li key={String(item.id)} className="flex items-start justify-between gap-3 rounded-xl border border-line bg-gradient-to-r from-brand-wash to-surface px-4 py-3">
+            <div className="min-w-0">
+              <p className="font-semibold">{String(item.title)}</p>
+              <p className="mt-1 text-sm text-muted">{String(item.summary || "")}</p>
+            </div>
+            <div className="flex shrink-0 items-center gap-2">
+              <button
+                type="button"
+                className="grid size-9 place-items-center rounded-md text-brand hover:bg-surface"
+                aria-label="Редактировать новость"
+                onClick={() => {
+                  const id = String(item.id);
+                  setEditingId(id);
+                  setTitle(String(item.title || ""));
+                  setSummary(String(item.summary || ""));
+                  setContent(String(item.content || ""));
+                  setImageUrl(String(item.imageUrl || ""));
+                  void apex(`/api/company-news/${id}`)
+                    .then((data) => {
+                      if (!data || typeof data !== "object") return;
+                      const row = data as Row;
+                      setTitle(String(row.title || ""));
+                      setSummary(String(row.summary || ""));
+                      setContent(String(row.content || ""));
+                      setImageUrl(typeof row.imageUrl === "string" ? row.imageUrl : "");
+                    })
+                    .catch(() => undefined);
+                }}
+              >
+                <Pencil className="size-4" />
+              </button>
+              <button
+                type="button"
+                className="text-sm font-semibold text-danger"
+                onClick={() => {
+                  void apex(`/api/company-news/${item.id}`, { method: "DELETE" })
+                    .then(() => {
+                      if (editingId === String(item.id)) clear();
+                      toast.success("Новость удалена");
+                      load();
+                    })
+                    .catch((error: unknown) => toast.error(error instanceof Error ? error.message : "Не получилось"));
+                }}
+              >
+                Удалить
+              </button>
+            </div>
           </li>
         ))}
       </ul>

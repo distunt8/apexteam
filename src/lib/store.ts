@@ -398,8 +398,8 @@ interface Actions {
     firstName: string;
     lastName: string;
     middleName: string;
-    department: string;
-    position: string;
+    departmentId: number;
+    positionId: number;
   }) => Promise<Result>;
   setUserStatus: (userId: string, status: Person["status"]) => Promise<Result>;
   saveActivity: (activity: Activity) => void;
@@ -1196,10 +1196,11 @@ export const useStore = create<AppState & Actions>()(
       updateEmployee: async (input) => {
         const firstName = input.firstName.trim();
         const lastName = input.lastName.trim();
-        const department = input.department.trim();
-        const position = input.position.trim();
-        if (!firstName || !lastName || !department || !position) {
-          return { ok: false as const, error: "Заполните имя, фамилию, отдел и должность" };
+        if (!firstName || !lastName) {
+          return { ok: false as const, error: "Заполните имя и фамилию" };
+        }
+        if (!Number.isInteger(input.departmentId) || !Number.isInteger(input.positionId)) {
+          return { ok: false as const, error: "Выберите отдел и должность" };
         }
         const target = get().people.find((item) => item.id === input.id);
         if (!target) return { ok: false as const, error: "Сотрудник не найден" };
@@ -1211,8 +1212,8 @@ export const useStore = create<AppState & Actions>()(
               lastName,
               middleName: input.middleName.trim(),
               avatarUrl: target.avatarUrl ?? "",
-              department,
-              position,
+              departmentId: input.departmentId,
+              positionId: input.positionId,
               isActive: target.status === "active",
             }),
           });
